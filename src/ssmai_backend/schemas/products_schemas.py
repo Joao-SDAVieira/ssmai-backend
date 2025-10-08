@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, HttpUrl
 
 
 class ProductSchema(BaseModel):
@@ -20,3 +20,11 @@ class PublicProductSchema(ProductSchema):
 
 class ProductsList(BaseModel):
     products: list[PublicProductSchema]
+
+
+class ExtractResultSchema(BaseModel):
+    id: int
+    extracted: bool
+    document_path: HttpUrl
+    created_at: datetime
+    extract_result: str
