@@ -764,27 +764,26 @@ async def generate_product_info_from_docs_pre_extracted_service(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=f"Extract with id {id_text_extract} not found!",
         )
-    
-    # bedrock_response = await bedrock_client.invoke_model(
-    #     modelId=Settings().CLOUDE_INFERENCE_PROFILE,
-    #     body=dumps(get_bedrock_prompt(document_db.extract_result))
-    # )
+    # colher de chá, comente daqui ate
+    bedrock_response = await bedrock_client.invoke_model(
+        modelId=Settings().CLOUDE_INFERENCE_PROFILE,
+        body=dumps(get_bedrock_prompt(document_db.extract_result))
+    )
 
-    # body_brute = await bedrock_response['body'].read()
-    # breakpoint()
-    # response_body:dict = loads(body_brute)
-    # response_ai_json = loads(response_body['content'][0]['text'])
-
-    response_ai_json = {
-                    "tipo_produto": "Whey Protein",
-                    "capacidade": 1,
-                    "unidade_de_medida_capacidade": "kg",
-                    "quantidade_individual": 1,
-                    "quantidade_entrada": 2,
-                    "marca": "Growth Supplements",
-                    "tamanho": None,
-                    "custo_und": 138.77
-                }
+    body_brute = await bedrock_response['body'].read()
+    response_body:dict = loads(body_brute)
+    response_ai_json = loads(response_body['content'][0]['text'])
+    # aqui. Depois descomente o json debaixo
+    # response_ai_json = {
+    #                 "tipo_produto": "Whey Protein",
+    #                 "capacidade": 1,
+    #                 "unidade_de_medida_capacidade": "kg",
+    #                 "quantidade_individual": 1,
+    #                 "quantidade_entrada": 2,
+    #                 "marca": "Growth Supplements",
+    #                 "tamanho": None,
+    #                 "custo_und": 138.77
+    #             }
     product_name = ''
     # capacity = ''
     # capacity_measureme = ''
@@ -831,7 +830,6 @@ async def generate_product_info_from_docs_pre_extracted_service(
         "custo_und": custo_und,
         "quantidade": quantidade_entrada,
         "categoria": product_type, 
-        "individual_quantity": individual_quantity,
     }
     
     document_db.ai_result = str(informations_values)

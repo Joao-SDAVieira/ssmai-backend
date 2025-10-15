@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, HttpUrl
 
 class ProductSchema(BaseModel):
     nome: str
-    custo_und: float # TODO: adicionar
+    custo_und: float
     quantidade: int
     categoria: str
 
@@ -31,5 +31,4 @@ class ExtractResultSchema(BaseModel):
 
 class ProductInfoByAIResponse(ProductSchema):
     document_id: int
-    individual_quantity: int # TODO: adicionar no produto normal
 

@@ -12,9 +12,9 @@ class Produto:
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     nome: Mapped[str]
-    custo_und: Mapped[float]  # TODO: Adicionar custo na ia
+    custo_und: Mapped[float]
     quantidade: Mapped[int]  # TODO: Adicionar na ia
-    categoria: Mapped[str]  # TODO: possível enum, adicionar na ia
+    categoria: Mapped[str]
 
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()

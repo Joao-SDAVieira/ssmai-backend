@@ -22,4 +22,4 @@ class User(SQLAlchemyBaseUserTable[int]):
     )
     updated_at: Mapped[datetime] = mapped_column(
         nullable=False, onupdate=func.now(), server_default=func.now()
-    )  # TODO: Análisar implementação de trigger para log
+    )
