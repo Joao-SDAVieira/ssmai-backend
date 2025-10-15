@@ -13,7 +13,559 @@ from ssmai_backend.schemas.root_schemas import FilterPage
 from ssmai_backend.settings import Settings
 
 def get_bedrock_prompt(text_extracted: str):
-    # TODO: adicionar preço
+
+    # text_extracted = """
+    #         NF-C
+    #     RECEBEMOS DE GROWTH SUPPLEMENTS PRODUTOS ALIMES neios TDA os PRODUTOS CONSTANTES DA NOTA FISCAL INDIC ADA AO LADO
+    #     N. 014041259
+    #     DATA DE RECEBIMENTO
+    #     SÉRIE 17
+    #     IDENTIFICAÇÃO ASSINA TURA DO RECEREDOR
+    #     N2
+    #     Identificação do emitente
+    #     DANFE
+    #     Growth
+    #     GROWTH SUPPL EMENTS PRO
+    #     DOCUMEN MIXILIAR DA
+    #     DUTOS ALIMENTIC LTDA
+    #     NOTA ELETRÓNICA
+    #     CHAVE DE ACESSO DA NF-E
+    #     AVENIDA WILSON LEMOS, Date
+    #     0-ENTILADA
+    #     4225 1010 8326 4400 0108 5501 7014 0412 5914 6788 6817
+    #     Complements: GALPADIS
+    #     USAIDA
+    #     SANTA LUZIA
+    #     N. 014041259
+    #     TUUCASSO
+    #     Consulta de autenticidade no portal nacional da NF-e
+    #     SUPPLEMENTS
+    #     SERIE 17
+    #     Fone: 1063394
+    #     fazenda gov br/portal ou no site da SEFAZ Autorizada
+    #     FOLHA 01/01
+    #     NATUREZA D.A. OPERAÇÃO
+    #     PROTOCOLO DE AUTORIZAÇÃO DE USO
+    #     VENDA DE PRODUTOS
+    #     242250391243919 06/10/2025
+    #     INSCRIÇÃO ESTADUAL
+    #     INSC.ESTADUAL DO SUBST TRIM.
+    #     CNPJ/CPF
+    #     253860009
+    #     824016127112
+    #     10.832.644/0001-08
+    #     DESTINATARIO/REMETENTE
+    #     NOME/RAZÃO SOCIAL
+    #     CARRIER
+    #     DATA DE EMISSÃO
+    #     ЮЛО VICTOR DE OLIVEIRA VIEIRA
+    #     535 467 668-14
+    #     06/10/2025
+    #     ENDEREÇO
+    #     BAIRRO/DISTRITO
+    #     DATA ENTRADA/SAIDA
+    #     CEP
+    #     RUA MARIA JOSE DA CONCEICAO, 95, COLEGIO MARIA ANTONIA DE
+    #     06/10/2025
+    #     VILA ANDRADE
+    #     05730-170
+    #     MUNICIPIO
+    #     HORA ENTRADA/SAIDA
+    #     FONE/FAX
+    #     LF
+    #     INSCRIÇÃO ESTADUAL
+    #     SAO PAULO
+    #     15:22:00
+    #     .........
+    #     SP
+    #     FATURA
+    #     CALCULO DO IMPOSTO
+    #     BASE DE CALCULO DO ICMS
+    #     VALOR DO ICMS
+    #     VALOR DO ICMS SUBSTITUIÇÃO
+    #     VALOR TOTAL DOS PRODUTOS
+    #     BASE DE CALCULO DO ICMS SUBSTITUIÇÃO
+    #     266,51
+    #     31,98
+    #     0,00
+    #     0,00
+    #     308,54
+    #     VALOR DO FRETE
+    #     VALOR TOTAL DA NOTA
+    #     VALOR DO SEGURO
+    #     DESCONTO
+    #     OUTRAS DESPESAS ACESSÓRIAS
+    #     VALOR DO IPI
+    #     0,00
+    #     0,00
+    #     266,51
+    #     0,00
+    #     42.03
+    #     0,00
+    #     TRANSPORTADOR/VOLUMES TRANSPORTADOS
+    #     RAZÃO SOCIAL
+    #     CÓDIGO ANTI
+    #     PLACA DO VEICULO
+    #     UF
+    #     CNPJ/CPF
+    #     FRETE FOR CONTA
+    #     40 675 366/0002-66
+    #     RI SERVICOS DE ENTREGA E LOGISTICA LTDA
+    #     I-DESTINATARIO
+    #     ENDEREÇO
+    #     MUNICIPIO
+    #     UF
+    #     INSCRIÇÃO ESTADUAL
+    #     AV PRESIDENTE WILSON
+    #     SAO PAULO
+    #     SP
+    #     131542250119
+    #     QUANTIDADE
+    #     ESPECIE
+    #     MARCA
+    #     NUMERAÇÃO
+    #     PESO BRUTO
+    #     PESO LIQUIDO
+    #     VOLUME
+    #     3,000
+    #     3,000
+    #     DADOS DO PRODU
+    #     COD. PROD
+    #     DESCRIÇÃO DO PROD/SERV.
+    #     CFOP
+    #     QUANT
+    #     V.UNITARIO
+    #     V.TOTAL
+    #     BC.ICMS
+    #     V.ICMS
+    #     V.IPI
+    #     A.ICMS
+    #     A.IPI
+    #     NCM/SH
+    #     CST
+    #     UN
+    #     10003
+    #     WHEY PROTEIN CONCENTRADO 80% IKG CHOCOLATE
+    #     21061000
+    #     500
+    #     6107
+    #     UN
+    #     2,0000
+    #     138,770000
+    #     277,54
+    #     239,73
+    #     28,77
+    #     0,00
+    #     12.00%
+    #     0.00%
+    #     10004
+    #     PASTA AMENDOIM IKG
+    #     20081100
+    #     000
+    #     6107
+    #     UN
+    #     1,0000
+    #     31,000000
+    #     31,00
+    #     26,78
+    #     3,21
+    #     0,00
+    #     12.00%
+    #     0.00%
+    #     LCULO DO ISSON
+    #     SCRIÇÃO MUNICIPAL
+    #     VALOR TOTAL DOS SERVIÇOS
+    #     BASE DE CÁLCULO DO ISSQN
+    #     VALOR DO ISSQN
+    #     os ADICIONAIS
+    #     RMAÇÕES COMPLEMENTARES
+    #     RESERV ADO AO FISCO
+    #     colo 242250391243919
+    #     do ICMS relativo ao Fundo de Combate a Pobreza FCP da UF de destino RS
+    #     or do ICMS Interestadual para a UF de destino: RS 15.99 Valor do ICMS
+    #     NF-C
+    #     RECEBEMOS
+    #     DE
+    #     GROWTH
+    #     SUPPLEMENTS
+    #     PRODUTOS
+    #     ALIMES
+    #     neios
+    #     TDA
+    #     os
+    #     PRODUTOS
+    #     CONSTANTES
+    #     DA
+    #     NOTA
+    #     FISCAL
+    #     INDIC
+    #     ADA
+    #     AO LADO
+    #     N.
+    #     014041259
+    #     DATA
+    #     DE
+    #     RECEBIMENTO
+    #     SÉRIE
+    #     17
+    #     IDENTIFICAÇÃO
+    #     ASSINA
+    #     TURA
+    #     DO
+    #     RECEREDOR
+    #     N2
+    #     Identificação
+    #     do
+    #     emitente
+    #     DANFE
+    #     Growth
+    #     GROWTH
+    #     SUPPL
+    #     EMENTS
+    #     PRO
+    #     DOCUMEN
+    #     MIXILIAR
+    #     DA
+    #     DUTOS
+    #     ALIMENTIC
+    #     LTDA
+    #     NOTA
+    #     ELETRÓNICA
+    #     CHAVE
+    #     DE
+    #     ACESSO
+    #     DA
+    #     NF-E
+    #     AVENIDA
+    #     WILSON
+    #     LEMOS,
+    #     Date
+    #     0-ENTILADA
+    #     4225
+    #     1010
+    #     8326
+    #     4400
+    #     0108
+    #     5501
+    #     7014
+    #     0412
+    #     5914
+    #     6788
+    #     6817
+    #     Complements:
+    #     GALPADIS
+    #     USAIDA
+    #     SANTA
+    #     LUZIA
+    #     N.
+    #     014041259
+    #     TUUCASSO
+    #     Consulta
+    #     de
+    #     autenticidade
+    #     no
+    #     portal
+    #     nacional
+    #     da
+    #     NF-e
+    #     SUPPLEMENTS
+    #     SERIE
+    #     17
+    #     Fone:
+    #     1063394
+    #     fazenda
+    #     gov
+    #     br/portal
+    #     ou
+    #     no
+    #     site
+    #     da
+    #     SEFAZ
+    #     Autorizada
+    #     FOLHA
+    #     01/01
+    #     NATUREZA
+    #     D.A.
+    #     OPERAÇÃO
+    #     PROTOCOLO
+    #     DE
+    #     AUTORIZAÇÃO
+    #     DE
+    #     USO
+    #     VENDA
+    #     DE
+    #     PRODUTOS
+    #     242250391243919
+    #     06/10/2025
+    #     INSCRIÇÃO
+    #     ESTADUAL
+    #     INSC.ESTADUAL
+    #     DO
+    #     SUBST
+    #     TRIM.
+    #     CNPJ/CPF
+    #     253860009
+    #     824016127112
+    #     10.832.644/0001-08
+    #     DESTINATARIO/REMETENTE
+    #     NOME/RAZÃO
+    #     SOCIAL
+    #     CARRIER
+    #     DATA
+    #     DE
+    #     EMISSÃO
+    #     ЮЛО
+    #     VICTOR
+    #     DE
+    #     OLIVEIRA
+    #     VIEIRA
+    #     535 467 668-14
+    #     06/10/2025
+    #     ENDEREÇO
+    #     BAIRRO/DISTRITO
+    #     DATA
+    #     ENTRADA/SAIDA
+    #     CEP
+    #     RUA
+    #     MARIA
+    #     JOSE
+    #     DA
+    #     CONCEICAO,
+    #     95,
+    #     COLEGIO
+    #     MARIA
+    #     ANTONIA
+    #     DE
+    #     06/10/2025
+    #     VILA
+    #     ANDRADE
+    #     05730-170
+    #     MUNICIPIO
+    #     HORA
+    #     ENTRADA/SAIDA
+    #     FONE/FAX
+    #     LF
+    #     INSCRIÇÃO
+    #     ESTADUAL
+    #     SAO
+    #     PAULO
+    #     15:22:00
+    #     .........
+    #     SP
+    #     FATURA
+    #     CALCULO
+    #     DO
+    #     IMPOSTO
+    #     BASE
+    #     DE
+    #     CALCULO
+    #     DO
+    #     ICMS
+    #     VALOR
+    #     DO
+    #     ICMS
+    #     VALOR
+    #     DO
+    #     ICMS
+    #     SUBSTITUIÇÃO
+    #     VALOR
+    #     TOTAL
+    #     DOS
+    #     PRODUTOS
+    #     BASE
+    #     DE
+    #     CALCULO
+    #     DO
+    #     ICMS
+    #     SUBSTITUIÇÃO
+    #     266,51
+    #     31,98
+    #     0,00
+    #     0,00
+    #     308,54
+    #     VALOR
+    #     DO
+    #     FRETE
+    #     VALOR
+    #     TOTAL
+    #     DA
+    #     NOTA
+    #     VALOR
+    #     DO
+    #     SEGURO
+    #     DESCONTO
+    #     OUTRAS
+    #     DESPESAS
+    #     ACESSÓRIAS
+    #     VALOR
+    #     DO
+    #     IPI
+    #     0,00
+    #     0,00
+    #     266,51
+    #     0,00
+    #     42.03
+    #     0,00
+    #     TRANSPORTADOR/VOLUMES
+    #     TRANSPORTADOS
+    #     RAZÃO
+    #     SOCIAL
+    #     CÓDIGO
+    #     ANTI
+    #     PLACA
+    #     DO
+    #     VEICULO
+    #     UF
+    #     CNPJ/CPF
+    #     FRETE
+    #     FOR
+    #     CONTA
+    #     40
+    #     675
+    #     366/0002-66
+    #     RI
+    #     SERVICOS
+    #     DE
+    #     ENTREGA
+    #     E
+    #     LOGISTICA
+    #     LTDA
+    #     I-DESTINATARIO
+    #     ENDEREÇO
+    #     MUNICIPIO
+    #     UF
+    #     INSCRIÇÃO
+    #     ESTADUAL
+    #     AV
+    #     PRESIDENTE
+    #     WILSON
+    #     SAO
+    #     PAULO
+    #     SP
+    #     131542250119
+    #     QUANTIDADE
+    #     ESPECIE
+    #     MARCA
+    #     NUMERAÇÃO
+    #     PESO
+    #     BRUTO
+    #     PESO
+    #     LIQUIDO
+    #     VOLUME
+    #     3,000
+    #     3,000
+    #     DADOS
+    #     DO
+    #     PRODU
+    #     COD.
+    #     PROD
+    #     DESCRIÇÃO
+    #     DO
+    #     PROD/SERV.
+    #     CFOP
+    #     QUANT
+    #     V.UNITARIO
+    #     V.TOTAL
+    #     BC.ICMS
+    #     V.ICMS
+    #     V.IPI
+    #     A.ICMS
+    #     A.IPI
+    #     NCM/SH
+    #     CST
+    #     UN
+    #     10003
+    #     WHEY
+    #     PROTEIN
+    #     CONCENTRADO
+    #     80%
+    #     IKG
+    #     CHOCOLATE
+    #     21061000
+    #     500
+    #     6107
+    #     UN
+    #     2,0000
+    #     138,770000
+    #     277,54
+    #     239,73
+    #     28,77
+    #     0,00
+    #     12.00%
+    #     0.00%
+    #     10004
+    #     PASTA
+    #     AMENDOIM
+    #     IKG
+    #     20081100
+    #     000
+    #     6107
+    #     UN
+    #     1,0000
+    #     31,000000
+    #     31,00
+    #     26,78
+    #     3,21
+    #     0,00
+    #     12.00%
+    #     0.00%
+    #     LCULO
+    #     DO
+    #     ISSON
+    #     SCRIÇÃO
+    #     MUNICIPAL
+    #     VALOR
+    #     TOTAL
+    #     DOS
+    #     SERVIÇOS
+    #     BASE
+    #     DE
+    #     CÁLCULO
+    #     DO
+    #     ISSQN
+    #     VALOR
+    #     DO
+    #     ISSQN
+    #     os
+    #     ADICIONAIS
+    #     RMAÇÕES
+    #     COMPLEMENTARES
+    #     RESERV
+    #     ADO
+    #     AO
+    #     FISCO
+    #     colo
+    #     242250391243919
+    #     do
+    #     ICMS
+    #     relativo
+    #     ao
+    #     Fundo
+    #     de
+    #     Combate
+    #     a
+    #     Pobreza
+    #     FCP
+    #     da
+    #     UF
+    #     de
+    #     destino
+    #     RS
+    #     or
+    #     do
+    #     ICMS
+    #     Interestadual
+    #     para
+    #     a
+    #     UF
+    #     de
+    #     destino:
+    #     RS
+    #     15.99
+    #     Valor
+    #     do
+    #     ICMS
+    # """
     prompt = f"""
         Você é um extrator de produtos. Receberá um TEXTO CRU extraído por OCR. 
         Extrair e devolver **apenas JSON válido** com os campos:
@@ -24,7 +576,7 @@ def get_bedrock_prompt(text_extracted: str):
         - quantidade_entrada (int)     -> quantos pacotes/itens estão entrando (se presente)
         - marca (string)
         - tamanho (string)             -> formato "63 cm x 80 cm" se aplicável
-
+        - custo_und (float)                -> custo unitário, se houver apenas o total, divida pela quantidade_entrada (ex: valor total: 100, quantidade_entrada: 2 -> 50)
         REGRAS:
         1) Sempre tente padronizar unidades: volumes → "litros", pesos → "kg". 
         Exemplos de conversão automática:
@@ -49,7 +601,6 @@ def get_bedrock_prompt(text_extracted: str):
         "quantidade_entrada": null,
         "marca": "JHIENE",
         "tamanho": "63 cm x 80 cm",
-        "raw_text": "SACOS P/ LIXO Med. 63 cm X 80 cm Contém 10 unid. 50 50L JHIENE"
         }}
 
         Agora extraia do texto abaixo:
@@ -214,25 +765,26 @@ async def generate_product_info_from_docs_pre_extracted_service(
             detail=f"Extract with id {id_text_extract} not found!",
         )
     
-    bedrock_response = await bedrock_client.invoke_model(
-        modelId=Settings().CLOUDE_INFERENCE_PROFILE,
-        body=dumps(get_bedrock_prompt(document_db.extract_result))
-    )
+    # bedrock_response = await bedrock_client.invoke_model(
+    #     modelId=Settings().CLOUDE_INFERENCE_PROFILE,
+    #     body=dumps(get_bedrock_prompt(document_db.extract_result))
+    # )
 
-    body_brute = await bedrock_response['body'].read()
-    response_body:dict = loads(body_brute)
-    response_ai_json = loads(response_body['content'][0]['text'])
+    # body_brute = await bedrock_response['body'].read()
+    # breakpoint()
+    # response_body:dict = loads(body_brute)
+    # response_ai_json = loads(response_body['content'][0]['text'])
 
-    # response_ai_json = {
-    #                 "tipo_produto": "Whey Protein",
-    #                 "capacidade": 1,
-    #                 "unidade_de_medida_capacidade": "kg",
-    #                 "quantidade_individual": 1,
-    #                 "quantidade_entrada": 2,
-    #                 "marca": "Growth Supplements",
-    #                 "tamanho": None,
-    #                 "sabor": "Chocolate"
-    #             }
+    response_ai_json = {
+                    "tipo_produto": "Whey Protein",
+                    "capacidade": 1,
+                    "unidade_de_medida_capacidade": "kg",
+                    "quantidade_individual": 1,
+                    "quantidade_entrada": 2,
+                    "marca": "Growth Supplements",
+                    "tamanho": None,
+                    "custo_und": 138.77
+                }
     product_name = ''
     # capacity = ''
     # capacity_measureme = ''
@@ -241,6 +793,7 @@ async def generate_product_info_from_docs_pre_extracted_service(
     # product_brand = ''
     quantidade_entrada = 1
     # size = ""
+    custo_und = 0.0
     
     
     if response_ai_json['tipo_produto']:
@@ -267,13 +820,15 @@ async def generate_product_info_from_docs_pre_extracted_service(
     if response_ai_json['tamanho']:
         product_name += f" | {response_ai_json['tamanho']}"
         # size = response_ai_json['marca']
+    if response_ai_json['custo_und']:
+        custo_und = response_ai_json['custo_und']
 
 
 
     informations_values ={
         "document_id": document_db.id,
         "nome": product_name,
-        "preco": 0.0,
+        "custo_und": custo_und,
         "quantidade": quantidade_entrada,
         "categoria": product_type, 
         "individual_quantity": individual_quantity,
