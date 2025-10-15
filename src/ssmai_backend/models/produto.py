@@ -11,11 +11,10 @@ class Produto:
     __tablename__ = "produtos"
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
-    titulo: Mapped[str]
-    preco_custo: Mapped[float]  # TODO: Adicionar custo na ia
+    nome: Mapped[str]
+    custo_und: Mapped[float]  # TODO: Adicionar custo na ia
     quantidade: Mapped[int]  # TODO: Adicionar na ia
     categoria: Mapped[str]  # TODO: possível enum, adicionar na ia
-    status: Mapped[str]  # TODO: Arrumar isso para entrada e saida
 
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()

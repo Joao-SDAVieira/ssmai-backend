@@ -77,7 +77,7 @@ async def create_product_service(
     product: ProductSchema, session: AsyncSession
 ):
     db_product = await session.scalar(
-        select(Produto).where(Produto.titulo == product.titulo)
+        select(Produto).where(Produto.nome == product.nome)
     )
 
     if db_product:  # TODO: alterar para o mesmo user
@@ -86,11 +86,10 @@ async def create_product_service(
         )
 
     db_product = Produto(
-        titulo=product.titulo,
-        preco=product.preco,
+        nome=product.nome,
+        custo_und=product.custo_und,
         quantidade=product.quantidade,
         categoria=product.categoria,
-        status=product.status,
     )
 
     session.add(db_product)
@@ -122,22 +121,21 @@ async def update_product_by_id_service(
     id: int, product: ProductSchema, session: AsyncSession
 ):
     product_db: Produto = await find_by_product_by_id(id, session)
-    product_with_same_titulo = await session.scalar(
-        select(Produto).where(Produto.titulo == product.titulo)
+    product_with_same_name = await session.scalar(
+        select(Produto).where(Produto.nome == product.nome)
     )
     if (
-        product_with_same_titulo
-        and product_with_same_titulo.id != product_db.id
+        product_with_same_name
+        and product_with_same_name.id != product_db.id
     ):
         raise HTTPException(
             status_code=HTTPStatus.CONFLICT, detail="Product already exists!"
         )
 
-    product_db.titulo = product.titulo
+    product_db.nome = product.nome
     product_db.categoria = product.categoria
-    product_db.preco = product.preco
+    product_db.preco = product.custo_und
     product_db.quantidade = product.quantidade
-    product_db.status = product.status
     await session.commit()
     await session.refresh(product_db)
     return product_db
@@ -223,7 +221,6 @@ async def generate_product_info_from_docs_pre_extracted_service(
 
     body_brute = await bedrock_response['body'].read()
     response_body:dict = loads(body_brute)
-    breakpoint()
     response_ai_json = loads(response_body['content'][0]['text'])
 
     # response_ai_json = {
@@ -275,12 +272,11 @@ async def generate_product_info_from_docs_pre_extracted_service(
 
     informations_values ={
         "document_id": document_db.id,
-        "titulo": product_name,
+        "nome": product_name,
         "preco": 0.0,
         "quantidade": quantidade_entrada,
         "categoria": product_type, 
         "individual_quantity": individual_quantity,
-        "status": "Retirar tudo que envolve status"
     }
     
     document_db.ai_result = str(informations_values)

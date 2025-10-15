@@ -9,7 +9,7 @@ from ssmai_backend.models.produto import table_registry
 
 @table_registry.mapped
 class User(SQLAlchemyBaseUserTable[int]):
-    __tablename__ = "users"
+    __tablename__ = "usuarios"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(nullable=False, unique=True)

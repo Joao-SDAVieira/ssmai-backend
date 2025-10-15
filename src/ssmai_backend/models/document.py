@@ -8,7 +8,7 @@ from ssmai_backend.models.produto import table_registry
 
 @table_registry.mapped
 class Document:
-    __tablename__ = "documents"
+    __tablename__ = "documentos"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     extracted: Mapped[bool]

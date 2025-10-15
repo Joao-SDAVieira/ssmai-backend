@@ -4,11 +4,10 @@ from pydantic import BaseModel, ConfigDict, HttpUrl
 
 
 class ProductSchema(BaseModel):
-    titulo: str
-    preco: float # TODO: adicionar
+    nome: str
+    custo_und: float # TODO: adicionar
     quantidade: int
     categoria: str
-    status: str  # TODO: Retirar
 
 
 class PublicProductSchema(ProductSchema):
