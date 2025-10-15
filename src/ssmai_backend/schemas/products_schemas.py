@@ -5,10 +5,10 @@ from pydantic import BaseModel, ConfigDict, HttpUrl
 
 class ProductSchema(BaseModel):
     titulo: str
-    preco: float
+    preco: float # TODO: adicionar
     quantidade: int
     categoria: str
-    status: str  # TODO: Migrar para Enum
+    status: str  # TODO: Retirar
 
 
 class PublicProductSchema(ProductSchema):
@@ -28,3 +28,9 @@ class ExtractResultSchema(BaseModel):
     document_path: HttpUrl
     created_at: datetime
     extract_result: str
+
+
+class ProductInfoByAIResponse(ProductSchema):
+    document_id: int
+    individual_quantity: int # TODO: adicionar no produto normal
+

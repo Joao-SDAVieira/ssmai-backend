@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.database import (
+    get_bedrock_client,
     get_s3_client,
     get_session,
     get_textract_client,
@@ -13,6 +14,7 @@ from ssmai_backend.models.user import User
 from ssmai_backend.routers.users import fastapi_users
 from ssmai_backend.schemas.products_schemas import (
     ExtractResultSchema,
+    ProductInfoByAIResponse,
     ProductSchema,
     ProductsList,
     PublicProductSchema,
@@ -22,6 +24,7 @@ from ssmai_backend.services.products_service import (
     create_product_by_document_service,
     create_product_service,
     delete_product_by_id_service,
+    generate_product_info_from_docs_pre_extracted_service,
     read_all_products_service,
     update_product_by_id_service,
 )
@@ -72,10 +75,10 @@ async def update_product_by_id(
     return await update_product_by_id_service(product_id, product, session)
 
 
-@router.post('/create_by_document/',
+@router.post('/extract_text_from_document/',
              status_code=HTTPStatus.CREATED,
              response_model=ExtractResultSchema)
-async def create_product_by_document(
+async def extract_text_from_document(
     document: UploadFile,
     session: T_Session,
     s3_client=Depends(get_s3_client),
@@ -86,4 +89,19 @@ async def create_product_by_document(
         session=session,
         s3_client=s3_client,
         textract_client=textract_client
+    )
+
+
+@router.post('/generate_product_by_ai_with_extract_id/{id_text_extract}',
+             status_code=HTTPStatus.CREATED,
+             response_model=ProductInfoByAIResponse)
+async def generate_product_info_from_docs_pre_extracted(
+    session: T_Session,
+    id_text_extract: int,
+    bedrock_client=Depends(get_bedrock_client),
+):
+    return await generate_product_info_from_docs_pre_extracted_service(
+        session=session,
+        bedrock_client=bedrock_client,
+        id_text_extract=id_text_extract
     )

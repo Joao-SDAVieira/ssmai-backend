@@ -14,6 +14,7 @@ class Document:
     extracted: Mapped[bool]
     document_path: Mapped[str]
     extract_result: Mapped[str] = mapped_column(default=None, nullable=True)
+    ai_result: Mapped[str] = mapped_column(default=None, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         nullable=False, server_default=func.now()

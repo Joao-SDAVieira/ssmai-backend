@@ -16,3 +16,7 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str
     S3_BUCKET: str
     REGION: str
+
+    BEDROCK_AWS_ACCESS_KEY_ID: str
+    BEDROCK_AWS_SECRET_ACCESS_KEY: str
+    CLOUDE_INFERENCE_PROFILE: str
