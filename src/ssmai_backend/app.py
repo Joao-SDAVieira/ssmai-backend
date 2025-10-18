@@ -4,7 +4,7 @@ from sys import platform
 
 from fastapi import FastAPI
 
-from ssmai_backend.routers import products
+from ssmai_backend.routers import products, stock
 from ssmai_backend.routers.users import fastapi_users, router
 from ssmai_backend.schemas.root_schemas import Message
 from ssmai_backend.schemas.users_schemas import UserPublic, UserSchema
@@ -17,6 +17,7 @@ if platform == "win32":
 app = FastAPI(title="SSMai API")
 app.include_router(products.router)
 app.include_router(router)
+app.include_router(stock.router)
 
 app.include_router(
     fastapi_users.get_auth_router(auth_backend, requires_verification=False),

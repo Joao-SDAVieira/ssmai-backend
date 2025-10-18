@@ -1,7 +1,8 @@
 from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, registry
+from ssmai_backend.enums.products_enums import MovementTypesEnum
 
 table_registry = registry()
 
@@ -12,13 +13,48 @@ class Produto:
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
     nome: Mapped[str]
-    custo_und: Mapped[float]
-    quantidade: Mapped[int]  # TODO: Adicionar na ia
     categoria: Mapped[str]
-
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         init=False, onupdate=func.now(), server_default=func.now()
+    )
+
+
+@table_registry.mapped_as_dataclass
+class Estoque:
+    __tablename__ = "estoque"
+
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    id_produtos: Mapped[int] = mapped_column(
+        ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False
+    )
+    quantidade_disponivel: Mapped[int]
+    custo_medio: Mapped[float] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        init=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(onupdate=func.now(),
+        init=False, server_default=func.now()
+    )
+
+
+@table_registry.mapped_as_dataclass
+class MovimentacoesEstoque:
+    __tablename__ = "movimentacoes_estoque"
+
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    id_produtos: Mapped[int] = mapped_column(
+        ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False
+    )
+    tipo: Mapped[MovementTypesEnum] = mapped_column(nullable=False)
+    quantidade: Mapped[int] = mapped_column(nullable=False)
+    preco_und: Mapped[float] = mapped_column(nullable=False)
+    total: Mapped[float] = mapped_column(nullable=False)
+    date: Mapped[datetime] = mapped_column(
+        init=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(onupdate=func.now(),
+        init=False, server_default=func.now()
     )

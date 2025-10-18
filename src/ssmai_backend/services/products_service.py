@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.models.document import Document
-from ssmai_backend.models.produto import Produto
+from ssmai_backend.models.produto import Produto, Estoque
 from ssmai_backend.schemas.products_schemas import ProductSchema
 from ssmai_backend.schemas.root_schemas import FilterPage
 from ssmai_backend.settings import Settings
@@ -638,14 +638,21 @@ async def create_product_service(
 
     db_product = Produto(
         nome=product.nome,
-        custo_und=product.custo_und,
-        quantidade=product.quantidade,
         categoria=product.categoria,
     )
 
     session.add(db_product)
+
     await session.commit()
     await session.refresh(db_product)
+    estoque_db = Estoque(
+        id_produtos=db_product.id,
+        quantidade_disponivel=0,
+        custo_medio=0
+        )
+    session.add(estoque_db)
+    await session.commit()
+
     return db_product
 
 
@@ -833,7 +840,7 @@ async def generate_product_info_from_docs_pre_extracted_service(
     }
     
     document_db.ai_result = str(informations_values)
-
+    breakpoint()
     await session.commit()
 
     return informations_values
