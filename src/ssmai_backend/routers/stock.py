@@ -1,14 +1,14 @@
 from http import HTTPStatus
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Query
 from typing import Annotated
 from ssmai_backend.database import get_session
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from ssmai_backend.models.produto import Estoque, MovimentacoesEstoque
-from ssmai_backend.schemas.root_schemas import Message
-from ssmai_backend.schemas.stock_schemas import EntryModel, EntryModelResponse
-
+from ssmai_backend.schemas.root_schemas import FilterPage
+from ssmai_backend.schemas.stock_schemas import MovimentModel, MovimentModelResponse, MovimentList
+from ssmai_backend.services.stock_service import (register_moviment_by_id_service,
+                                                  get_moviments_by_product_id_service,
+                                                  get_all_moviments_service)
 
 
 router = APIRouter(prefix="/stock", tags=["stock"])
@@ -16,37 +16,68 @@ router = APIRouter(prefix="/stock", tags=["stock"])
 T_Session = Annotated[AsyncSession, Depends(get_session)]
 
 
-def register_entry_or_exit():
-    ...
-
-
-#TODO: fazer validações de usuário ou empresa
-@router.post('/{product_id}',
+#TODO: fazer validações de usuário ou empresa. Validar com triggers
+@router.post('/entry/{product_id}',
              status_code=HTTPStatus.CREATED,
-             response_model=EntryModelResponse)
+             response_model=MovimentModelResponse)
 async def register_entry_by_product_id(
     session: T_Session,
     product_id: int,
-    entry: EntryModel
+    entry: MovimentModel
 ):
-    stock_db = await session.scalar(
-        select(Estoque).where(Estoque.id_produtos == product_id)
-        )
-    if not stock_db:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND,
-                            detail="Product or Stock not found!")
-    
-    entry_db = MovimentacoesEstoque(
-        id_produtos=product_id,
-        tipo="Entrada",
-        quantidade=entry.quantidade,
-        preco_und=entry.preco_und,
-        total=entry.preco_und * entry.quantidade
+    return await register_moviment_by_id_service(
+        product_id=product_id,
+        session=session,
+        moviment=entry,
+        type = "entrada",
     )
-    session.add(entry_db)
-    await session.commit()
-    await session.refresh(entry_db)
-
-    return entry_db
 
 
+@router.post('/exit/{product_id}',
+             status_code=HTTPStatus.CREATED,
+             response_model=MovimentModelResponse)
+async def register_exit_by_product_id(
+    session: T_Session,
+    product_id: int,
+    exit: MovimentModel
+):
+    return await register_moviment_by_id_service(
+        product_id=product_id,
+        session=session,
+        moviment=exit,
+        type = "saida",
+    )
+
+
+#TODO: implementar filtro por empresa
+@router.get('{product_id}',
+            status_code=HTTPStatus.OK,
+            response_model=MovimentList
+            )
+async def get_moviments_by_product_id(
+    session: T_Session,
+    product_id: int,
+    filter: Annotated[FilterPage, Query()]
+):
+    return {"products": await get_moviments_by_product_id_service(
+        product_id=product_id,
+        session=session,
+        filter=filter
+    ) }
+
+
+#TODO: implementar filtro por empresa para n trazer tudo
+@router.get(
+    '',
+    status_code=HTTPStatus.OK,
+    response_model=MovimentList
+    )
+async def get_all_moviments(
+    session: T_Session,
+    filter: Annotated[FilterPage, Query()]
+):
+    return {"products": await get_all_moviments_service(
+        session=session,
+        filter=filter
+    )
+    }

@@ -11,15 +11,19 @@ class StockModel(BaseModel):
     updated_at: datetime
 
 
-class EntryModel(BaseModel):
+class MovimentModel(BaseModel):
     quantidade: int
     preco_und: float
 
 
-class EntryModelResponse(EntryModel):
+class MovimentModelResponse(MovimentModel):
     id: int
     id_produtos: int
     tipo: MovementTypesEnum
     total: float
     date: datetime
     updated_at: datetime
+
+
+class MovimentList(BaseModel):
+    products: list[MovimentModelResponse]
