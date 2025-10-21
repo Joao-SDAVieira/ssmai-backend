@@ -44,7 +44,7 @@ T_CurrentUser = Annotated[User, Depends(fastapi_users.current_user())]
 async def create_product(
     product: ProductSchema,
     session: T_Session,
-    current_user: T_CurrentUser
+    # current_user: T_CurrentUser
 ):
     # print(current_user.id)
     return await create_product_service(product, session)

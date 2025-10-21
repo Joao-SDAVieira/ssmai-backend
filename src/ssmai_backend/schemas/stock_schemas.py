@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from ssmai_backend.enums.products_enums import MovementTypesEnum
 
 class StockModel(BaseModel):
@@ -11,14 +11,22 @@ class StockModel(BaseModel):
     updated_at: datetime
 
 
-class MovimentModel(BaseModel):
+class MovimentBaseModel(BaseModel):
     quantidade: int
+
+
+class ExitModel(MovimentBaseModel):
+    ...
+
+
+class EntryModel(MovimentBaseModel):
     preco_und: float
 
 
-class MovimentModelResponse(MovimentModel):
+class MovimentModelResponse(MovimentBaseModel):
     id: int
     id_produtos: int
+    preco_und: float
     tipo: MovementTypesEnum
     total: float
     date: datetime
@@ -27,3 +35,7 @@ class MovimentModelResponse(MovimentModel):
 
 class MovimentList(BaseModel):
     products: list[MovimentModelResponse]
+
+
+class StockList(BaseModel):
+    stocks: list[StockModel]
