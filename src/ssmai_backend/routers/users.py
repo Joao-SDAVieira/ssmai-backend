@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi_users import FastAPIUsers
 
 from ssmai_backend.models.user import User
@@ -12,13 +12,21 @@ from ssmai_backend.services.user_service import (
 )
 
 fastapi_users = FastAPIUsers[User, int](get_user_repository, [auth_backend])
+current_superuser = fastapi_users.current_user(superuser=True)
 
 router = APIRouter(prefix="/users", tags=["users"])
 T_UserManager = Annotated[UserService, Depends(get_user_repository)]
 
 
-@router.get("/{first_name}", response_model=list[UserPublic])
-async def get_users_by_first_name(
-    first_name: str, user_repository: T_UserManager
+async def inject_creator(
+    request: Request,
+    creator: User = Depends(current_superuser),
 ):
-    return await user_repository.get_by_firts_name(first_name)
+    request.state.creator = creator
+
+
+@router.get("/", response_model=list[UserPublic])
+async def get_all_users(
+    user_repository: T_UserManager
+):
+    return await user_repository.get_all()

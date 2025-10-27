@@ -1,6 +1,9 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict
+
+from pydantic import BaseModel
+
 from ssmai_backend.enums.products_enums import MovementTypesEnum
+
 
 class StockModel(BaseModel):
     id: int

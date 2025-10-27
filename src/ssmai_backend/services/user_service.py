@@ -8,6 +8,7 @@ from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
 from sqlalchemy import select
 
 from ssmai_backend.models.user import User
+from ssmai_backend.schemas.users_schemas import BaseUserSchema, UserSchema
 from ssmai_backend.security.user_settings import get_user_db
 
 SECRET_KEY = "SECRET"
@@ -33,12 +34,26 @@ class UserService(IntegerIDMixin, BaseUserManager[User, int]):
                 reason="Password should not contain e-mail"
             )
 
-    async def get_by_firts_name(self, first_name: str):
+    async def create(
+        self,
+        user_create: BaseUserSchema | UserSchema,
+        safe=False,
+        request=None,
+    ):
+        creator = None
+        if request and hasattr(request, "state"):
+            creator = getattr(request.state, "creator", None)
+
+        if creator and creator.is_superuser:
+            user_create = UserSchema(
+                **user_create.model_dump(), id_empresas=creator.id_empresas
+            )
+        return await super().create(user_create, safe, request)
+
+    async def get_all(self):
         user_db: SQLAlchemyUserDatabase = self.user_db
         users = await user_db.session.scalars(
-            select(user_db.user_table).where(
-                user_db.user_table.name == first_name
-            )
+            select(user_db.user_table)
         )
         return users
 

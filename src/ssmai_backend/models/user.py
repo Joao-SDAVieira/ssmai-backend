@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from fastapi_users.db import SQLAlchemyBaseUserTable
-from sqlalchemy import Integer, func
+from sqlalchemy import ForeignKey, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ssmai_backend.models.produto import table_registry
@@ -12,6 +12,10 @@ class User(SQLAlchemyBaseUserTable[int]):
     __tablename__ = "usuarios"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id_empresas: Mapped[int] = mapped_column(
+        ForeignKey('empresas.id', ondelete='CASCADE', name="fk_usuarios_empresas"),
+        nullable=False
+    )
     username: Mapped[str] = mapped_column(nullable=False, unique=True)
     name: Mapped[str] = mapped_column(nullable=False)
     last_name: Mapped[str] = mapped_column(nullable=False)

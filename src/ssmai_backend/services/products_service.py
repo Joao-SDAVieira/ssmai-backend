@@ -1,16 +1,18 @@
 from http import HTTPStatus
-from uuid import uuid4
 from json import dumps, loads
+from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.models.document import Document
-from ssmai_backend.models.produto import Produto, Estoque
+from ssmai_backend.models.produto import Estoque, Produto
+from ssmai_backend.models.user import User
 from ssmai_backend.schemas.products_schemas import ProductSchema
 from ssmai_backend.schemas.root_schemas import FilterPage
 from ssmai_backend.settings import Settings
+
 
 def get_bedrock_prompt(text_extracted: str):
 
@@ -609,7 +611,6 @@ def get_bedrock_prompt(text_extracted: str):
         ---FIM DO TEXTO---
         """
 
-
     bedrock_request_body = {
             "anthropic_version": "bedrock-2023-05-31",
             "messages": [
@@ -624,8 +625,24 @@ def get_bedrock_prompt(text_extracted: str):
     return bedrock_request_body
 
 
+async def find_product_by_id_if_same_enterpryse(id: int, session: AsyncSession, current_user: User):
+    product_db = await session.scalar(select(Produto).where(Produto.id == id))
+    if not product_db:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Product or Stock not found!",
+        )
+    if product_db.id_empresas != current_user.id_empresas:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail='Unauthorized'
+        )
+
+    return product_db
+
+
 async def create_product_service(
-    product: ProductSchema, session: AsyncSession
+    product: ProductSchema, session: AsyncSession, current_user: User
 ):
     db_product = await session.scalar(
         select(Produto).where(Produto.nome == product.nome)
@@ -639,6 +656,7 @@ async def create_product_service(
     db_product = Produto(
         nome=product.nome,
         categoria=product.categoria,
+        id_empresas=current_user.id_empresas
     )
 
     session.add(db_product)
@@ -656,9 +674,22 @@ async def create_product_service(
     return db_product
 
 
-async def read_all_products_service(session: AsyncSession, filter: FilterPage):
+async def read_all_products_service(session: AsyncSession,
+                                    filter: FilterPage):
     return await session.scalars(
         select(Produto).offset(filter.offset).limit(filter.limit)
+    )
+
+
+async def read_all_products_by_user_enterpryse_service(
+        session: AsyncSession,
+        filter: FilterPage,
+        current_user: User
+):
+    return await session.scalars(
+        select(Produto).where(
+            Produto.id_empresas == current_user.id_empresas
+            ).offset(filter.offset).limit(filter.limit)
     )
 
 
@@ -666,8 +697,8 @@ async def read_all_products_service(session: AsyncSession, filter: FilterPage):
 #  o produto é do usuário que criou (perm)
 
 
-async def delete_product_by_id_service(id: int, session: AsyncSession):
-    product_db = await find_by_product_by_id(id, session)
+async def delete_product_by_id_service(id: int, session: AsyncSession, current_user: User):
+    product_db = await find_product_by_id_if_same_enterpryse(id, session, current_user)
 
     # TODO: se usuário é dono do produto
     await session.delete(product_db)
@@ -676,9 +707,9 @@ async def delete_product_by_id_service(id: int, session: AsyncSession):
 
 
 async def update_product_by_id_service(
-    id: int, product: ProductSchema, session: AsyncSession
+    id: int, product: ProductSchema, session: AsyncSession, current_user: User
 ):
-    product_db: Produto = await find_by_product_by_id(id, session)
+    product_db = await find_product_by_id_if_same_enterpryse(id, session, current_user)
     product_with_same_name = await session.scalar(
         select(Produto).where(Produto.nome == product.nome)
     )
@@ -692,20 +723,8 @@ async def update_product_by_id_service(
 
     product_db.nome = product.nome
     product_db.categoria = product.categoria
-    product_db.preco = product.custo_und
-    product_db.quantidade = product.quantidade
     await session.commit()
     await session.refresh(product_db)
-    return product_db
-
-
-async def find_by_product_by_id(id: int, session: AsyncSession):
-    product_db = await session.scalar(select(Produto).where(Produto.id == id))
-    if not product_db:
-        raise HTTPException(
-            status_code=HTTPStatus.BAD_REQUEST,
-            detail=f"Product with id {id} not found!",
-        )
     return product_db
 
 
@@ -778,8 +797,8 @@ async def generate_product_info_from_docs_pre_extracted_service(
     )
 
     body_brute = await bedrock_response['body'].read()
-    response_body:dict = loads(body_brute)
-    response_ai_json = loads(response_body['content'][0]['text'])
+    response_body: dict = loads(body_brute)
+    response_ai_json: dict = loads(response_body['content'][0]['text'])
     # aqui. Depois descomente o json debaixo
     # response_ai_json = {
     #                 "tipo_produto": "Whey Protein",
@@ -800,8 +819,7 @@ async def generate_product_info_from_docs_pre_extracted_service(
     quantidade_entrada = 1
     # size = ""
     custo_und = 0.0
-    
-    
+
     if response_ai_json['tipo_produto']:
         product_name += response_ai_json['tipo_produto']
         product_type = response_ai_json['tipo_produto']
@@ -818,7 +836,7 @@ async def generate_product_info_from_docs_pre_extracted_service(
 
     if response_ai_json['quantidade_entrada']:
         quantidade_entrada = response_ai_json['quantidade_entrada']
-    
+
     if response_ai_json['marca']:
         product_name += f" | {response_ai_json['marca']}"
         # product_brand = response_ai_json['marca']
@@ -829,19 +847,16 @@ async def generate_product_info_from_docs_pre_extracted_service(
     if response_ai_json['custo_und']:
         custo_und = response_ai_json['custo_und']
 
-
-
-    informations_values ={
+    informations_values = {
         "document_id": document_db.id,
         "nome": product_name,
         "custo_und": custo_und,
         "quantidade": quantidade_entrada,
-        "categoria": product_type, 
+        "categoria": product_type,
     }
-    
+
     document_db.ai_result = str(informations_values)
     breakpoint()
     await session.commit()
 
     return informations_values
-    

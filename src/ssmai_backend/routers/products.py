@@ -25,6 +25,7 @@ from ssmai_backend.services.products_service import (
     create_product_service,
     delete_product_by_id_service,
     generate_product_info_from_docs_pre_extracted_service,
+    read_all_products_by_user_enterpryse_service,
     read_all_products_service,
     update_product_by_id_service,
 )
@@ -44,24 +45,44 @@ T_CurrentUser = Annotated[User, Depends(fastapi_users.current_user())]
 async def create_product(
     product: ProductSchema,
     session: T_Session,
-    # current_user: T_CurrentUser
+    current_user: T_CurrentUser
 ):
-    # print(current_user.id)
-    return await create_product_service(product, session)
+    return await create_product_service(product, session, current_user)
 
 
-@router.get("/", response_model=ProductsList)
+@router.get("/all", response_model=ProductsList)
 async def read_products(
-    session: T_Session, filter: Annotated[FilterPage, Query()]
+    session: T_Session,
+    filter: Annotated[FilterPage, Query()],
 ):
     return {"products": await read_all_products_service(session, filter)}
+
+
+@router.get("/all_by_user_enterpryse", response_model=ProductsList)
+async def get_all_products_by_current_user(
+    session: T_Session,
+    filter: Annotated[FilterPage, Query()],
+    current_user: T_CurrentUser
+):
+    return {"products": await read_all_products_by_user_enterpryse_service(
+        session,
+        filter,
+        current_user
+        )}
 
 
 @router.delete(
     "/{product_id}", status_code=HTTPStatus.OK, response_model=Message
 )
-async def delete_product(session: T_Session, product_id: int):
-    return {"message": await delete_product_by_id_service(product_id, session)}
+async def delete_product(
+    session: T_Session,
+    product_id: int,
+    current_user: T_CurrentUser
+):
+    return {"message": await delete_product_by_id_service(
+        product_id,
+        session,
+        current_user,)}
 
 
 @router.put(
@@ -70,9 +91,17 @@ async def delete_product(session: T_Session, product_id: int):
     response_model=PublicProductSchema,
 )
 async def update_product_by_id(
-    product: ProductSchema, product_id: int, session: T_Session
+    product: ProductSchema,
+    product_id: int,
+    session: T_Session,
+    current_user: T_CurrentUser
 ):
-    return await update_product_by_id_service(product_id, product, session)
+    return await update_product_by_id_service(
+        product_id,
+        product,
+        session,
+        current_user
+        )
 
 
 @router.post('/extract_text_from_document/',

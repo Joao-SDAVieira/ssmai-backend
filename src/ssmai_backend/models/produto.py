@@ -1,7 +1,8 @@
 from datetime import datetime
 
-from sqlalchemy import func, ForeignKey
+from sqlalchemy import ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, registry
+
 from ssmai_backend.enums.products_enums import MovementTypesEnum
 
 table_registry = registry()
@@ -12,6 +13,10 @@ class Produto:
     __tablename__ = "produtos"
 
     id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    id_empresas: Mapped[int] = mapped_column(
+        ForeignKey('empresas.id', ondelete='CASCADE', name="fk_produtos_empresas"),
+        nullable=False
+    )
     nome: Mapped[str]
     categoria: Mapped[str]
     created_at: Mapped[datetime] = mapped_column(
@@ -53,6 +58,21 @@ class MovimentacoesEstoque:
     preco_und: Mapped[float] = mapped_column(nullable=False)
     total: Mapped[float] = mapped_column(nullable=False)
     date: Mapped[datetime] = mapped_column(
+        init=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(onupdate=func.now(),
+        init=False, server_default=func.now()
+    )
+
+
+@table_registry.mapped_as_dataclass
+class Empresa:
+    __tablename__ = "empresas"
+
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    nome: Mapped[str] = mapped_column(nullable=True, unique=True)
+    ramo: Mapped[str] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(onupdate=func.now(),
