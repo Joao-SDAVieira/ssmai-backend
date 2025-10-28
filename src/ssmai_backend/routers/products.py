@@ -37,6 +37,14 @@ T_Session = Annotated[AsyncSession, Depends(get_session)]
 T_CurrentUser = Annotated[User, Depends(fastapi_users.current_user())]
 
 
+@router.get("/all", response_model=ProductsList)
+async def read_products(
+    session: T_Session,
+    filter: Annotated[FilterPage, Query()],
+):
+    return {"products": await read_all_products_service(session, filter)}
+
+
 @router.post(
     "/",
     status_code=HTTPStatus.CREATED,
@@ -48,14 +56,6 @@ async def create_product(
     current_user: T_CurrentUser
 ):
     return await create_product_service(product, session, current_user)
-
-
-@router.get("/all", response_model=ProductsList)
-async def read_products(
-    session: T_Session,
-    filter: Annotated[FilterPage, Query()],
-):
-    return {"products": await read_all_products_service(session, filter)}
 
 
 @router.get("/all_by_user_enterpryse", response_model=ProductsList)

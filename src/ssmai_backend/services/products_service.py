@@ -3,7 +3,7 @@ from json import dumps, loads
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.models.document import Document
@@ -645,10 +645,15 @@ async def create_product_service(
     product: ProductSchema, session: AsyncSession, current_user: User
 ):
     db_product = await session.scalar(
-        select(Produto).where(Produto.nome == product.nome)
+        select(Produto).where(
+            and_(
+                Produto.nome == product.nome,
+                Produto.id_empresas == current_user.id_empresas
+            )
+            )
     )
 
-    if db_product:  # TODO: alterar para o mesmo user
+    if db_product:
         raise HTTPException(
             status_code=HTTPStatus.CONFLICT, detail="Product already exists!"
         )
@@ -693,14 +698,9 @@ async def read_all_products_by_user_enterpryse_service(
     )
 
 
-# TODO: para endpoints de alteração, verificar se
-#  o produto é do usuário que criou (perm)
-
-
 async def delete_product_by_id_service(id: int, session: AsyncSession, current_user: User):
     product_db = await find_product_by_id_if_same_enterpryse(id, session, current_user)
 
-    # TODO: se usuário é dono do produto
     await session.delete(product_db)
     await session.commit()
     return "Product deleted!"
@@ -811,13 +811,8 @@ async def generate_product_info_from_docs_pre_extracted_service(
     #                 "custo_und": 138.77
     #             }
     product_name = ''
-    # capacity = ''
-    # capacity_measureme = ''
-    individual_quantity = 1
     product_type = ''
-    # product_brand = ''
     quantidade_entrada = 1
-    # size = ""
     custo_und = 0.0
 
     if response_ai_json['tipo_produto']:
@@ -828,22 +823,19 @@ async def generate_product_info_from_docs_pre_extracted_service(
         product_name += f" | {response_ai_json['capacidade']}{
            response_ai_json['unidade_de_medida_capacidade'] if response_ai_json['unidade_de_medida_capacidade'] else ''
         }"
-        # capacity = response_ai_json['capacidade']
 
     if response_ai_json['quantidade_individual']:
         product_name += f" | {response_ai_json['quantidade_individual'] }und"
-        individual_quantity = response_ai_json['quantidade_individual']
 
     if response_ai_json['quantidade_entrada']:
         quantidade_entrada = response_ai_json['quantidade_entrada']
 
     if response_ai_json['marca']:
         product_name += f" | {response_ai_json['marca']}"
-        # product_brand = response_ai_json['marca']
 
     if response_ai_json['tamanho']:
         product_name += f" | {response_ai_json['tamanho']}"
-        # size = response_ai_json['marca']
+
     if response_ai_json['custo_und']:
         custo_und = response_ai_json['custo_und']
 

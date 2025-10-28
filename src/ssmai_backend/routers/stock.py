@@ -35,7 +35,6 @@ T_Session = Annotated[AsyncSession, Depends(get_session)]
 T_CurrentUser = Annotated[User, Depends(fastapi_users.current_user())]
 
 
-# TODO: implementar filtro por empresa
 @router.get('/moviments/{product_id}',
             status_code=HTTPStatus.OK,
             response_model=MovimentList
@@ -85,7 +84,6 @@ async def get_all_moviments(
     }
 
 
-# TODO: fazer validações de usuário ou empresa. Validar com triggers
 @router.post('/entry/{product_id}',
              status_code=HTTPStatus.CREATED,
              response_model=MovimentModelResponse)
@@ -138,7 +136,22 @@ async def get_moviments_by_product_id_user_enterpryse(
     )}
 
 
-# TODO: implementar filtro por empresa para n trazer tudo
+@router.get(
+    '/moviments/enterpryse_user/',
+    status_code=HTTPStatus.OK,
+    response_model=MovimentList
+    )
+async def get_all_moviments_by_enterpryse_user(
+    session: T_Session,
+    filter: Annotated[FilterPage, Query()],
+    current_user: T_CurrentUser
+):
+    return {"products": await get_all_moviments_by_enterpryse_user_service(
+        session=session,
+        filter=filter,
+        current_user=current_user
+    )
+    }
 
 
 @router.get(
@@ -173,24 +186,5 @@ async def get_all_stock_by_user_enterpryse(
         session=session,
         filter=filter,
         current_user=current_user,
-    )
-    }
-
-
-# TODO: implementar filtro por empresa para n trazer tudo
-@router.get(
-    '/moviments/enterpryse_user/',
-    status_code=HTTPStatus.OK,
-    response_model=MovimentList
-    )
-async def get_all_moviments_by_enterpryse_user(
-    session: T_Session,
-    filter: Annotated[FilterPage, Query()],
-    current_user: T_CurrentUser
-):
-    return {"products": await get_all_moviments_by_enterpryse_user_service(
-        session=session,
-        filter=filter,
-        current_user=current_user
     )
     }
