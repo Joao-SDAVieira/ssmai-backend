@@ -1,9 +1,9 @@
 from http import HTTPStatus
 
-from fastapi import HTTPException, UploadFile
-from sqlalchemy import and_, join, select, func
-from sqlalchemy.ext.asyncio import AsyncSession
 import pandas as pd
+from fastapi import HTTPException, UploadFile
+from sqlalchemy import and_, join, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.models.produto import (
     Empresa,
@@ -16,7 +16,7 @@ from ssmai_backend.schemas.root_schemas import FilterPage
 from ssmai_backend.schemas.stock_schemas import (
     EntryModel,
     ExitModel,
-    MovimentModelResponse
+    MovimentModelResponse,
 )
 
 
@@ -43,9 +43,8 @@ async def get_stock_by_product_id(
 # async def verify_if_products_exists(product_ids: list[int],
 #                                     session: AsyncSession,
 #                                     current_user: User):
-    
-#     qtd = session.scalar(select(func.count()).select_from(Produto).where(and_(Estoque.id_produtos == current_user.id_empresas, Produto.id)))
 
+#     qtd = session.scalar(select(func.count()).select_from(Produto).where(and_(Estoque.id_produtos == current_user.id_empresas, Produto.id)))
 
 
 async def register_entry_by_id_service(
@@ -81,7 +80,6 @@ async def register_entry_by_id_service(
         session.add(entry_db)
 
     return entry_db
-    
 
 
 async def register_exit_by_id_service(
@@ -222,7 +220,6 @@ async def get_all_stock_by_user_enterpryse_service(
     return result.scalars().all()
 
 
-
 async def insert_moviments_with_csv_service(
     session: AsyncSession,
     current_user: User,
@@ -236,10 +233,10 @@ async def insert_moviments_with_csv_service(
     contents = await csv_file.read()
     try:
         df_moviments = pd.read_csv(pd.io.common.BytesIO(contents))
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
-            detail=f"Unable to read CSV"
+            detail="Unable to read CSV"
         )
     required_columns = {"id", "id_produtos", "tipo", "quantidade", "preco_und", "total", "date", "updated_at"}
     if not required_columns.issubset(df_moviments.columns):
@@ -281,6 +278,4 @@ async def insert_moviments_with_csv_service(
         await session.rollback()
         raise e
 
-
     return {'message': 'success'}
-    

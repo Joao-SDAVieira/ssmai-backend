@@ -1,7 +1,7 @@
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.database import (
@@ -25,10 +25,11 @@ from ssmai_backend.services.products_service import (
     create_product_service,
     delete_product_by_id_service,
     generate_product_info_from_docs_pre_extracted_service,
+    insert_products_with_csv_service,
     read_all_products_by_user_enterpryse_service,
     read_all_products_service,
     update_product_by_id_service,
-    insert_products_with_csv_service
+    delete_all_products_by_enterpryse_id_service
 )
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -145,4 +146,16 @@ async def insert_products_with_csv(
 ):
     return await insert_products_with_csv_service(
         session, current_user, csv_file
+    )
+
+
+@router.delete('/delete_all/{enterpryse_id}/',
+             response_model=Message,
+             status_code=HTTPStatus.OK)
+async def delete_all_products_by_enterpryse_id(
+    session: T_Session,
+    enterpryse_id: int
+):
+    return await delete_all_products_by_enterpryse_id_service(
+        session, enterpryse_id
     )

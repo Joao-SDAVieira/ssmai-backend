@@ -2,10 +2,10 @@ from http import HTTPStatus
 from json import dumps, loads
 from uuid import uuid4
 
-from fastapi import HTTPException, UploadFile
-from sqlalchemy import and_, select, insert
-from sqlalchemy.ext.asyncio import AsyncSession
 import pandas as pd
+from fastapi import HTTPException, UploadFile
+from sqlalchemy import and_, insert, select, delete
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.models.document import Document
 from ssmai_backend.models.produto import Estoque, Produto
@@ -646,7 +646,7 @@ async def create_product_service(
     product: ProductSchema,
     session: AsyncSession,
     current_user: User,
-    is_batch = False
+    is_batch=False
 ):
     db_product = await session.scalar(
         select(Produto).where(
@@ -871,10 +871,10 @@ async def insert_products_with_csv_service(
     contents = await csv_file.read()
     try:
         df_produtos = pd.read_csv(pd.io.common.BytesIO(contents))
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST,
-            detail=f"Unable to read CSV"
+            detail="Unable to read CSV"
         )
     required_columns = {"id", "nome", "categoria", "created_at", "updated_at"}
     if not required_columns.issubset(df_produtos.columns):
@@ -882,7 +882,6 @@ async def insert_products_with_csv_service(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=f"CSV deve conter as colunas: {', '.join(required_columns)}"
         )
-
 
     df_produtos["id_empresas"] = current_user.id_empresas
 
@@ -906,6 +905,16 @@ async def insert_products_with_csv_service(
         raise HTTPException(status_code=500, detail=f"Erro ao inserir dados: {e}")
 
     return {'message': 'success'}
+
+
+async def delete_all_products_by_enterpryse_id_service(
+    session: AsyncSession,
+    enterpryse_id: int,
+):
+    await session.execute(
+        delete(Produto)
+        .where(Produto.id_empresas == enterpryse_id)
+        )
     
-    
-    
+    await session.commit()
+    return {'message': 'deleted!'}

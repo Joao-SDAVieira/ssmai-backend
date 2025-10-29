@@ -1,7 +1,7 @@
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, UploadFile, File
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.database import get_session
@@ -24,9 +24,9 @@ from ssmai_backend.services.stock_service import (
     get_moviments_by_product_id_service,
     get_moviments_by_product_id_user_enterpryse_service,
     get_stock_by_product_id_service,
+    insert_moviments_with_csv_service,
     register_entry_by_id_service,
     register_exit_by_id_service,
-    insert_moviments_with_csv_service
 )
 
 router = APIRouter(prefix="/stock", tags=["stock"])

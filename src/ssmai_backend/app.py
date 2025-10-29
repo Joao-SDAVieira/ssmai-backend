@@ -4,7 +4,7 @@ from sys import platform
 
 from fastapi import Depends, FastAPI
 
-from ssmai_backend.routers import enterprises, products, stock
+from ssmai_backend.routers import enterprises, products, stock, ai_analysis
 from ssmai_backend.routers.users import fastapi_users, inject_creator, router
 from ssmai_backend.schemas.root_schemas import Message
 from ssmai_backend.schemas.users_schemas import (
@@ -23,6 +23,7 @@ app.include_router(products.router)
 app.include_router(router)
 app.include_router(stock.router)
 app.include_router(enterprises.router)
+app.include_router(ai_analysis.router)
 
 
 app.include_router(
