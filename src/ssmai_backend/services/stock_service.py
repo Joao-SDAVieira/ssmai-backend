@@ -1,8 +1,9 @@
 from http import HTTPStatus
 
-from fastapi import HTTPException
-from sqlalchemy import and_, join, select
+from fastapi import HTTPException, UploadFile
+from sqlalchemy import and_, join, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+import pandas as pd
 
 from ssmai_backend.models.produto import (
     Empresa,
@@ -15,6 +16,7 @@ from ssmai_backend.schemas.root_schemas import FilterPage
 from ssmai_backend.schemas.stock_schemas import (
     EntryModel,
     ExitModel,
+    MovimentModelResponse
 )
 
 
@@ -38,48 +40,86 @@ async def get_stock_by_product_id(
     return stock_db
 
 
+# async def verify_if_products_exists(product_ids: list[int],
+#                                     session: AsyncSession,
+#                                     current_user: User):
+    
+#     qtd = session.scalar(select(func.count()).select_from(Produto).where(and_(Estoque.id_produtos == current_user.id_empresas, Produto.id)))
+
+
+
 async def register_entry_by_id_service(
     product_id: int,
     session: AsyncSession,
-    moviment: EntryModel,
-    current_user: User
+    moviment: EntryModel | MovimentModelResponse,
+    current_user: User,
+    batch: bool = False
 ):
     await get_stock_by_product_id(product_id, session, current_user)
+    if not batch:
+        entry_db = MovimentacoesEstoque(
+            id_produtos=product_id,
+            tipo='Entrada',
+            quantidade=moviment.quantidade,
+            preco_und=moviment.preco_und,
+            total=moviment.preco_und * moviment.quantidade
+        )
+        session.add(entry_db)
+        await session.commit()
+        await session.refresh(entry_db)
+    else:
+        entry_db = MovimentacoesEstoque(
+            id_produtos=product_id,
+            tipo='Entrada',
+            quantidade=moviment.quantidade,
+            preco_und=moviment.preco_und,
+            total=moviment.preco_und * moviment.quantidade
+        )
+        entry_db.updated_at = moviment.updated_at
+        entry_db.date = moviment.date
+        # entry_db.id = moviment.id
+        session.add(entry_db)
 
-    entry_db = MovimentacoesEstoque(
-        id_produtos=product_id,
-        tipo='Entrada',
-        quantidade=moviment.quantidade,
-        preco_und=moviment.preco_und,
-        total=moviment.preco_und * moviment.quantidade
-    )
-    session.add(entry_db)
-    await session.commit()
-    await session.refresh(entry_db)
     return entry_db
+    
 
 
 async def register_exit_by_id_service(
     product_id: int,
     session: AsyncSession,
-    moviment: ExitModel,
-    current_user: User
+    moviment: ExitModel | MovimentModelResponse,
+    current_user: User,
+    batch: bool = False
 ):
     stock_db = await get_stock_by_product_id(product_id, session, current_user)
-    if stock_db.quantidade_disponivel < moviment.quantidade:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST,
-                            detail='Quantity unavailable')
-    entry_db = MovimentacoesEstoque(
-        id_produtos=product_id,
-        tipo='Saida',
-        quantidade=moviment.quantidade,
-        preco_und=stock_db.custo_medio,
-        total=stock_db.custo_medio * moviment.quantidade
-    )
-    session.add(entry_db)
-    await session.commit()
-    await session.refresh(entry_db)
-    return entry_db
+    if not batch:
+        if stock_db.quantidade_disponivel < moviment.quantidade:
+            raise HTTPException(status_code=HTTPStatus.BAD_REQUEST,
+                                detail='Quantity unavailable')
+        exit_db = MovimentacoesEstoque(
+            id_produtos=product_id,
+            tipo='Saida',
+            quantidade=moviment.quantidade,
+            preco_und=stock_db.custo_medio,
+            total=stock_db.custo_medio * moviment.quantidade
+        )
+        session.add(exit_db)
+        await session.commit()
+        await session.refresh(exit_db)
+    else:
+        exit_db = MovimentacoesEstoque(
+            id_produtos=product_id,
+            tipo='Saida',
+            quantidade=moviment.quantidade,
+            preco_und=stock_db.custo_medio,
+            total=stock_db.custo_medio * moviment.quantidade
+        )
+        exit_db.updated_at = moviment.updated_at
+        exit_db.date = moviment.date
+        # exit_db.id = moviment.id
+        session.add(exit_db)
+
+    return exit_db
 
 
 async def get_moviments_by_product_id_service(
@@ -180,3 +220,67 @@ async def get_all_stock_by_user_enterpryse_service(
     )
     result = await session.execute(statement)
     return result.scalars().all()
+
+
+
+async def insert_moviments_with_csv_service(
+    session: AsyncSession,
+    current_user: User,
+    csv_file: UploadFile
+):
+    if not csv_file.filename.endswith(".csv"):
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Unexpected format"
+        )
+    contents = await csv_file.read()
+    try:
+        df_moviments = pd.read_csv(pd.io.common.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"Unable to read CSV"
+        )
+    required_columns = {"id", "id_produtos", "tipo", "quantidade", "preco_und", "total", "date", "updated_at"}
+    if not required_columns.issubset(df_moviments.columns):
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"CSV deve conter as colunas: {', '.join(required_columns)}"
+        )
+
+    try:
+        for _, row in df_moviments.iterrows():
+            tipo = row["tipo"]
+            product_id = row["id_produtos"]
+            if tipo == "Entrada":
+                moviment = MovimentModelResponse(
+                    id=row["id"],
+                    id_produtos=row['id_produtos'],
+                    tipo=row['tipo'],
+                    quantidade=row["quantidade"],
+                    preco_und=row["preco_und"],
+                    total=row['total'],
+                    date=row['date'],
+                    updated_at=row['updated_at']
+                )
+                await register_entry_by_id_service(product_id, session, moviment, current_user, batch=True)
+            elif tipo == "Saida":
+                moviment = MovimentModelResponse(
+                    id=row["id"],
+                    id_produtos=row['id_produtos'],
+                    tipo=row['tipo'],
+                    quantidade=row["quantidade"],
+                    preco_und=row["preco_und"],
+                    total=row['total'],
+                    date=row['date'],
+                    updated_at=row['updated_at']
+                )
+                await register_exit_by_id_service(product_id, session, moviment, current_user, batch=True)
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        raise e
+
+
+    return {'message': 'success'}
+    

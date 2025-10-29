@@ -1,13 +1,13 @@
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.database import get_session
 from ssmai_backend.models.user import User
 from ssmai_backend.routers.users import fastapi_users
-from ssmai_backend.schemas.root_schemas import FilterPage
+from ssmai_backend.schemas.root_schemas import FilterPage, Message
 from ssmai_backend.schemas.stock_schemas import (
     EntryModel,
     ExitModel,
@@ -26,6 +26,7 @@ from ssmai_backend.services.stock_service import (
     get_stock_by_product_id_service,
     register_entry_by_id_service,
     register_exit_by_id_service,
+    insert_moviments_with_csv_service
 )
 
 router = APIRouter(prefix="/stock", tags=["stock"])
@@ -188,3 +189,16 @@ async def get_all_stock_by_user_enterpryse(
         current_user=current_user,
     )
     }
+
+
+@router.post('/moviments/insert_batch',
+    response_model=Message,
+    status_code=HTTPStatus.CREATED)
+async def insert_moviments_with_csv(
+    session: T_Session,
+    current_user: T_CurrentUser,
+    csv_file: UploadFile = File(...)
+):
+    return await insert_moviments_with_csv_service(
+        session, current_user, csv_file
+    )

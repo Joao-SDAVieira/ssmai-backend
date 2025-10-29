@@ -1,7 +1,7 @@
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, UploadFile
+from fastapi import APIRouter, Depends, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.database import (
@@ -28,6 +28,7 @@ from ssmai_backend.services.products_service import (
     read_all_products_by_user_enterpryse_service,
     read_all_products_service,
     update_product_by_id_service,
+    insert_products_with_csv_service
 )
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -133,4 +134,15 @@ async def generate_product_info_from_docs_pre_extracted(
         session=session,
         bedrock_client=bedrock_client,
         id_text_extract=id_text_extract
+    )
+
+
+@router.post('/insert_batch', response_model=Message, status_code=HTTPStatus.CREATED)
+async def insert_products_with_csv(
+    session: T_Session,
+    current_user: T_CurrentUser,
+    csv_file: UploadFile = File(...)
+):
+    return await insert_products_with_csv_service(
+        session, current_user, csv_file
     )

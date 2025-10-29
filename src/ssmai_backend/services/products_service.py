@@ -3,8 +3,9 @@ from json import dumps, loads
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, insert
 from sqlalchemy.ext.asyncio import AsyncSession
+import pandas as pd
 
 from ssmai_backend.models.document import Document
 from ssmai_backend.models.produto import Estoque, Produto
@@ -642,7 +643,10 @@ async def find_product_by_id_if_same_enterpryse(id: int, session: AsyncSession, 
 
 
 async def create_product_service(
-    product: ProductSchema, session: AsyncSession, current_user: User
+    product: ProductSchema,
+    session: AsyncSession,
+    current_user: User,
+    is_batch = False
 ):
     db_product = await session.scalar(
         select(Produto).where(
@@ -852,3 +856,56 @@ async def generate_product_info_from_docs_pre_extracted_service(
     await session.commit()
 
     return informations_values
+
+
+async def insert_products_with_csv_service(
+    session: AsyncSession,
+    current_user: User,
+    csv_file: UploadFile
+):
+    if not csv_file.filename.endswith(".csv"):
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail="Unexpected format"
+        )
+    contents = await csv_file.read()
+    try:
+        df_produtos = pd.read_csv(pd.io.common.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"Unable to read CSV"
+        )
+    required_columns = {"id", "nome", "categoria", "created_at", "updated_at"}
+    if not required_columns.issubset(df_produtos.columns):
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail=f"CSV deve conter as colunas: {', '.join(required_columns)}"
+        )
+
+
+    df_produtos["id_empresas"] = current_user.id_empresas
+
+    products_dict = df_produtos.to_dict(orient="records")
+    df_estoque = pd.DataFrame({
+        "id": df_produtos["id"],
+        "id_produtos": df_produtos["id"],
+        "quantidade_disponivel": 0,
+        "custo_medio": 0.0,
+        "created_at": df_produtos['created_at'],
+        "updated_at": df_produtos['updated_at']
+        })
+
+    estoque_dict = df_estoque.to_dict(orient="records")
+    try:
+        await session.execute(insert(Produto), products_dict)
+        await session.execute(insert(Estoque), estoque_dict)
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(status_code=500, detail=f"Erro ao inserir dados: {e}")
+
+    return {'message': 'success'}
+    
+    
+    
