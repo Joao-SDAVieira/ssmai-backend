@@ -8,6 +8,7 @@ from ssmai_backend.database import get_session
 from ssmai_backend.schemas.enterpryse_schemas import (
     EnterpryseResponseModel,
     EnterpryseSchema,
+    EnterpryseGet
 )
 from ssmai_backend.schemas.root_schemas import Message
 from ssmai_backend.services.enterprise_services import (
@@ -44,7 +45,7 @@ async def create_enterpryse(
 
 @router.get('/{enterpryse_id}',
              status_code=HTTPStatus.CREATED,
-             response_model=EnterpryseResponseModel)
+             response_model=EnterpryseGet)
 async def get_enterpryse_by_id(
     session: T_Session,
     enterpryse_id: int
@@ -57,7 +58,7 @@ async def get_enterpryse_by_id(
 
 @router.get('/',
              status_code=HTTPStatus.CREATED,
-             response_model=list[EnterpryseResponseModel])
+             response_model=list[EnterpryseGet])
 async def get_all_enterpryse(
     session: T_Session,
 ):
