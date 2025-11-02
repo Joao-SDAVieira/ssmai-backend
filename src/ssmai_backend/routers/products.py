@@ -29,7 +29,8 @@ from ssmai_backend.services.products_service import (
     read_all_products_by_user_enterpryse_service,
     read_all_products_service,
     update_product_by_id_service,
-    delete_all_products_by_enterpryse_id_service
+    delete_all_products_by_enterpryse_id_service,
+    create_product_by_document_service_fake
 )
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -159,3 +160,20 @@ async def delete_all_products_by_enterpryse_id(
     return await delete_all_products_by_enterpryse_id_service(
         session, enterpryse_id
     )
+
+
+
+@router.post('/extract_text_from_document/fake',
+             status_code=HTTPStatus.CREATED,
+             response_model=ExtractResultSchema)
+async def extract_text_from_document(
+    document: UploadFile,
+    session: T_Session,
+    current_user: T_CurrentUser
+):
+    return await create_product_by_document_service_fake(
+        current_user,
+        document=document,
+        session=session,
+    )
+
