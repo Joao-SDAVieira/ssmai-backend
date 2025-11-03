@@ -78,3 +78,23 @@ class Empresa:
     updated_at: Mapped[datetime] = mapped_column(onupdate=func.now(),
         init=False, server_default=func.now()
     )
+
+
+@table_registry.mapped_as_dataclass
+class Previsoes:
+    __tablename__ = "previsoes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, init=False)
+    id_produtos: Mapped[int] = mapped_column(
+        ForeignKey('produtos.id', ondelete='CASCADE'), nullable=False
+    )
+    data: Mapped[datetime] = mapped_column(
+        init=False, server_default=func.now()
+    )
+    estoque_previsto: Mapped[float] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        init=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(onupdate=func.now(),
+        init=False, server_default=func.now()
+    )
