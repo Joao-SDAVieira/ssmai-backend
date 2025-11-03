@@ -21,7 +21,7 @@ T_CurrentUser = Annotated[User, Depends(fastapi_users.current_user())]
 T_Session = Annotated[AsyncSession, Depends(get_session)]
 
 
-@router.get("/", response_model=Message)
+@router.put("/all", response_model=Message)
 async def update_batch(
     current_user: T_CurrentUser,
     session: T_Session,
@@ -35,18 +35,11 @@ async def update_batch(
 async def get_analysis_by_product_id(
     current_user: T_CurrentUser,
     session: T_Session,
-    product_id: int
+    product_id: int,
+    service_level: float=0.95, # perguntar qual nivel de exposição ao risco
+    lead_time: int=7
 ):
-    return await get_analysis_by_product_id_service(product_id, session)
-
-
-@router.get("/{product_id}", response_model=AnalysisSchema)
-async def get_analysis_by_product_id(
-    current_user: T_CurrentUser,
-    session: T_Session,
-    product_id: int
-):
-    return await get_analysis_by_product_id_service(product_id, session)
+    return await get_analysis_by_product_id_service(product_id, session, service_level, lead_time)
 
 
 @router.get("/{product_id}/graph", response_model=PrevisoesResponse)

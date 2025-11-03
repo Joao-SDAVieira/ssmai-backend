@@ -180,7 +180,6 @@ async def get_analysis_by_product_id_service(
 
     ideal_stock = demanda_leadtime + safety_stock
     faltante = ideal_stock - stock_db.quantidade_disponivel
-    print(faltante)
     return {
         "diary_average": diary_average,
         "demanda_leadtime": demanda_leadtime, #saida até reposição
