@@ -6,7 +6,7 @@ from ssmai_backend.models.user import User
 from ssmai_backend.models.produto import MovimentacoesEstoque, Produto, Estoque, Previsoes
 from ssmai_backend.settings import Settings
 
-from sqlalchemy import func, select, case, delete, insert, ScalarResult
+from sqlalchemy import func, select, case, delete, insert, ScalarResult, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
@@ -194,7 +194,6 @@ async def get_graph_data_by_product_id_service(
     product_id: int,
     session: AsyncSession,
 ):
-    print()
     movimento_case = case(
     (MovimentacoesEstoque.tipo == "entrada", MovimentacoesEstoque.quantidade),
     else_=-MovimentacoesEstoque.quantidade
@@ -214,20 +213,24 @@ async def get_graph_data_by_product_id_service(
     )
 
     result_hist = await session.execute(stmt_hist)
-    breakpoint()
     historico = [{"data": r.data, "estoque": r.estoque} for r in result_hist]
 
+    ultima_data = historico[-1]["data"] if historico else None
     stmt_prev = (
         select(
             Previsoes.data,
             Previsoes.estoque_previsto
         )
-        .where(Previsoes.id_produtos == product_id)
+        .where(
+            and_(
+                Previsoes.id_produtos == product_id,
+                Previsoes.data > ultima_data
+            )
+            )
         .order_by(Previsoes.data.asc())
     )
     result_prev = await session.execute(stmt_prev)
     previsoes = [{"data": r.data, "estoque_previsto": r.estoque_previsto} for r in result_prev]
-    breakpoint()
     return {
         "historico": historico,
         "previsoes": previsoes
