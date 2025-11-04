@@ -340,8 +340,10 @@ Principais tabelas: {main_tables_str}"""
 
     def _clean_response(self, response: str) -> str:
         """Remove technical messages from AI response"""
+        logger.info(f"🧹 Cleaning response with {len(response.split())} lines")
         lines = response.split('\n')
         filtered_lines = []
+        removed_lines = []
         
         tech_patterns = [
             re.compile(r'^\[Calling tool .* with args .*\]$'),
@@ -357,8 +359,15 @@ Principais tabelas: {main_tables_str}"""
             line_stripped = line.strip()
             if not any(pattern.match(line_stripped) for pattern in tech_patterns):
                 filtered_lines.append(line)
+            else:
+                removed_lines.append(line_stripped)
         
-        return '\n'.join(filtered_lines).strip()
+        if removed_lines:
+            logger.info(f"🗑️  Removed {len(removed_lines)} technical lines")
+        
+        cleaned = '\n'.join(filtered_lines).strip()
+        logger.info(f"🧹 Cleaning complete: {len(cleaned)} characters final")
+        return cleaned
 
     async def process_query(self, query: str) -> str:
         """Process user query using Claude 3.5 Haiku"""
@@ -384,7 +393,7 @@ Principais tabelas: {main_tables_str}"""
             # Create request payload
             payload = {
                 "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 1000,
+                "max_tokens": 4096,  # Increased token limit
                 "top_k": 250,
                 "stop_sequences": [],
                 "temperature": 0.7,
@@ -445,7 +454,7 @@ Principais tabelas: {main_tables_str}"""
                     # Follow-up request
                     follow_up_payload = {
                         "anthropic_version": "bedrock-2023-05-31",
-                        "max_tokens": 1000,
+                        "max_tokens": 4096,  # Increased token limit for follow-up
                         "top_k": 250,
                         "stop_sequences": [],
                         "temperature": 0.7,
@@ -470,7 +479,11 @@ Principais tabelas: {main_tables_str}"""
                         final_text.append(follow_up_body["content"][0]["text"])
             
             raw_response = "\n".join(final_text)
-            return self._clean_response(raw_response)
+            logger.info(f"🔍 Raw response length: {len(raw_response)} characters")
+            logger.info(f"🔍 Raw response preview: {raw_response[:200]}...")
+            cleaned_response = self._clean_response(raw_response)
+            logger.info(f"🔍 Cleaned response length: {len(cleaned_response)} characters")
+            return cleaned_response
             
         except Exception as e:
             logger.error(f"Error processing query: {e}")
