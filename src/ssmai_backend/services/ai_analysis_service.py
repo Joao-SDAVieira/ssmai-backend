@@ -103,6 +103,18 @@ async def create_forecast(df_to_prophet: pd.DataFrame, ai_model: Prophet) -> pd.
     return df_forecast
 
 
+async def calculate_ideal_stock_by_df_forecast(df_forecast: pd.DataFrame):
+    future_stock = df_forecast.tail(15)['saida_prevista']
+    standart_deviation = future_stock.std()
+    lead_time=7
+    diary_average = future_stock.mean()
+    service_level = 0.95,
+    score = norm.ppf(service_level)
+    demanda_leadtime = diary_average * lead_time
+    safety_stock = score * standart_deviation * np.sqrt(lead_time)
+    return demanda_leadtime + safety_stock
+
+
 async def add_forecast_on_db_by_product_id(product_id: int,
                                            df_forecast: pd.DataFrame,
                                            session: AsyncSession):
@@ -110,11 +122,14 @@ async def add_forecast_on_db_by_product_id(product_id: int,
 
     await session.execute(statement)
     df_forecast = df_forecast[['ds', 'yhat']].rename(
-        columns={'ds': 'data', 'yhat': 'estoque_previsto'}
+        columns={'ds': 'data', 'yhat': 'saida_prevista'}
         )
     df_forecast['id_produtos'] = product_id
     forecast_dict = df_forecast.to_dict(orient="records")
     await session.execute(insert(Previsoes), forecast_dict)
+    stock_db = await session.scalar(select(Estoque).where(Estoque.id_produtos == product_id))
+    estoque_ideal = await calculate_ideal_stock_by_df_forecast(df_forecast)  
+    stock_db.estoque_ideal = float(estoque_ideal.item())
 
 
 async def create_df_by_object_model_list(obj_list: list[ScalarResult]):
@@ -162,7 +177,7 @@ async def get_analysis_by_product_id_service(
 
     stock_db = await session.scalar(select(Estoque).where(Estoque.id_produtos == product_id))
 
-    future_stock = df_forecast.tail(15)['estoque_previsto']
+    future_stock = df_forecast.tail(15)['saida_prevista']
 
     score = norm.ppf(service_level)
 
@@ -186,43 +201,41 @@ async def get_graph_data_by_product_id_service(
     product_id: int,
     session: AsyncSession,
 ):
-    movimento_case = case(
-    (MovimentacoesEstoque.tipo == "entrada", MovimentacoesEstoque.quantidade),
-    else_=-MovimentacoesEstoque.quantidade
-    )
-
-    saldo_cumulativo = func.sum(movimento_case).over(
-        order_by=MovimentacoesEstoque.date
-    )
 
     stmt_hist = (
         select(
-            MovimentacoesEstoque.date.label("data"),
-            saldo_cumulativo.label("estoque")
+            func.date(MovimentacoesEstoque.date).label("data"),
+            func.sum(
+                case((MovimentacoesEstoque.tipo == "saida", MovimentacoesEstoque.quantidade), else_=0)
+            ).label("saida_dia")
         )
         .where(MovimentacoesEstoque.id_produtos == product_id)
-        .order_by(MovimentacoesEstoque.date.asc())
+        .group_by(func.date(MovimentacoesEstoque.date))
+        .order_by(func.date(MovimentacoesEstoque.date).asc())
     )
 
     result_hist = await session.execute(stmt_hist)
-    historico = [{"data": r.data, "estoque": r.estoque} for r in result_hist]
+    historico = [{"data": r.data, "estoque": r.saida_dia} for r in result_hist]
 
     ultima_data = historico[-1]["data"] if historico else None
+    
     stmt_prev = (
         select(
             Previsoes.data,
-            Previsoes.estoque_previsto
+            Previsoes.saida_prevista
         )
         .where(
             and_(
                 Previsoes.id_produtos == product_id,
                 Previsoes.data > ultima_data
             )
-            )
+        )
         .order_by(Previsoes.data.asc())
     )
     result_prev = await session.execute(stmt_prev)
-    previsoes = [{"data": r.data, "estoque_previsto": int(r.estoque_previsto)} for r in result_prev]
+    
+    # Mudei o nome da chave para 'saida_prevista' para clareza
+    previsoes = [{"data": r.data, "saida_prevista": int(r.saida_prevista)} for r in result_prev]
     return {
         "historico": historico,
         "previsoes": previsoes

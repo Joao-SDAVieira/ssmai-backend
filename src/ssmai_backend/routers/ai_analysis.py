@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from ssmai_backend.database import get_s3_client, get_session
+from ssmai_backend.database import get_session
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -10,9 +10,8 @@ from ssmai_backend.models.user import User
 from ssmai_backend.routers.users import fastapi_users
 
 from ssmai_backend.schemas.root_schemas import Message
-from ssmai_backend.schemas.ai_analysis_schemas import AnalysisSchema, PrevisoesResponse
+from ssmai_backend.schemas.ai_analysis_schemas import AnalysisSchema, PrevisoesResponse, IndicatorSchema
 from ssmai_backend.services.ai_analysis_service import update_ai_predictions_to_enterpryse_service, get_analysis_by_product_id_service, get_graph_data_by_product_id_service, update_by_product_id_service
-
 
 router = APIRouter(prefix="/ai_analysis", tags=["ai_analysis"])
 
@@ -57,3 +56,11 @@ async def get_grath_data_by_product_id(
     product_id: int
 ):
     return await get_graph_data_by_product_id_service(product_id, session)
+
+
+@router.get("/{product_id}/graph", response_model=list[IndicatorSchema])
+async def get_wors_stocks(
+    current_user: T_CurrentUser,
+    session: T_Session,
+):
+    return await get_wors_stocks_service(session)
