@@ -8,23 +8,32 @@ import json
 import sys
 import logging
 from typing import Any, Dict, List, Optional, Union
-try:
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
-    PSYCOPG_VERSION = 2
-except ImportError:
-    import psycopg
-    from psycopg.rows import dict_row
-    PSYCOPG_VERSION = 3
 import os
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-# Setup logging
+# Setup logging first
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Try different PostgreSQL drivers in order of preference
+PSYCOPG_VERSION = None
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    PSYCOPG_VERSION = 2
+    logger.info("Using psycopg2 driver")
+except ImportError:
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+        PSYCOPG_VERSION = 3
+        logger.info("Using psycopg3 driver")
+    except ImportError:
+        logger.error("Neither psycopg2 nor psycopg (v3) is available")
+        raise ImportError("Neither psycopg2 nor psycopg (v3) is available. Please install one of them.")
 
 class PostgreSQLMCPServer:
     def __init__(self):

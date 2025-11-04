@@ -42,6 +42,7 @@ class MCPClient:
         self.mcp_process = None
         self.tools = []
         self.database_context = ""
+        self._mcp_lock = asyncio.Lock()  # Add lock for MCP communication
         
         # SSMai Context
         self.ssmai_context = """Você é o assistente do SSMai (Smart Stock Management AI).
@@ -124,50 +125,51 @@ class MCPClient:
             raise
 
     async def _send_mcp_request(self, method: str, params: Optional[Dict] = None) -> Dict:
-        """Send request to MCP server"""
-        request = {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": method,
-            "params": params or {}
-        }
-        
-        try:
-            # Send request
-            request_json = json.dumps(request) + "\n"
-            self.mcp_process.stdin.write(request_json.encode())
-            await self.mcp_process.stdin.drain()
-            
-            # Read response with timeout
-            try:
-                response_line = await asyncio.wait_for(
-                    self.mcp_process.stdout.readline(), 
-                    timeout=10.0
-                )
-            except asyncio.TimeoutError:
-                raise Exception("MCP server timeout - no response received")
-            
-            if not response_line:
-                raise Exception("MCP server closed connection")
-            
-            response_text = response_line.decode().strip()
-            if not response_text:
-                raise Exception("Empty response from MCP server")
+        """Send request to MCP server with concurrency protection"""
+        async with self._mcp_lock:  # Protect MCP communication with lock
+            request = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": method,
+                "params": params or {}
+            }
             
             try:
-                response = json.loads(response_text)
-            except json.JSONDecodeError as e:
-                logger.error(f"Invalid JSON from MCP server: {response_text}")
-                raise Exception(f"Invalid JSON response: {e}")
-            
-            if "error" in response:
-                raise Exception(f"MCP Error: {response['error']}")
-            
-            return response.get("result", {})
-            
-        except Exception as e:
-            logger.error(f"MCP communication error: {e}")
-            raise
+                # Send request
+                request_json = json.dumps(request) + "\n"
+                self.mcp_process.stdin.write(request_json.encode())
+                await self.mcp_process.stdin.drain()
+                
+                # Read response with timeout
+                try:
+                    response_line = await asyncio.wait_for(
+                        self.mcp_process.stdout.readline(), 
+                        timeout=15.0  # Increased timeout
+                    )
+                except asyncio.TimeoutError:
+                    raise Exception("MCP server timeout - no response received")
+                
+                if not response_line:
+                    raise Exception("MCP server closed connection")
+                
+                response_text = response_line.decode().strip()
+                if not response_text:
+                    raise Exception("Empty response from MCP server")
+                
+                try:
+                    response = json.loads(response_text)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON from MCP server: {response_text}")
+                    raise Exception(f"Invalid JSON response: {e}")
+                
+                if "error" in response:
+                    raise Exception(f"MCP Error: {response['error']}")
+                
+                return response.get("result", {})
+                
+            except Exception as e:
+                logger.error(f"MCP communication error: {e}")
+                raise
 
     async def _initialize_tools(self):
         """Initialize available tools from MCP server"""
@@ -182,15 +184,22 @@ class MCPClient:
             raise
 
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Call a specific MCP tool"""
-        try:
-            result = await self._send_mcp_request("tools/call", {
-                "name": name,
-                "arguments": arguments
-            })
-            return result
-        except Exception as e:
-            logger.error(f"Error calling tool {name}: {e}")
+        """Call a specific MCP tool with retry logic"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                result = await self._send_mcp_request("tools/call", {
+                    "name": name,
+                    "arguments": arguments
+                })
+                return result
+            except Exception as e:
+                logger.error(f"Error calling tool {name} (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1)  # Wait before retry
+                else:
+                    # Return empty result on final failure to prevent complete breakdown
+                    return {"content": f"Error executing {name}: {str(e)}"}
             return {"content": f"Error: {str(e)}"}
 
     async def _map_database_structure(self) -> str:
