@@ -6,7 +6,8 @@ from ssmai_backend.models.user import User
 from ssmai_backend.models.produto import MovimentacoesEstoque, Produto, Estoque, Previsoes
 from ssmai_backend.settings import Settings
 
-from sqlalchemy import func, select, case, delete, insert, ScalarResult, and_
+from sqlalchemy import func, select, case, delete, insert, ScalarResult, and_, Integer
+from sqlalchemy.sql.expression import cast
 from sqlalchemy.ext.asyncio import AsyncSession
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
@@ -240,3 +241,101 @@ async def get_graph_data_by_product_id_service(
         "historico": historico,
         "previsoes": previsoes
     }
+
+
+async def get_worst_stock_deviation_service(session: AsyncSession, current_user: User):
+    
+    difference_percent_schema = case(
+        (Estoque.estoque_ideal == 0, None),
+        else_ = (
+            (Estoque.quantidade_disponivel - Estoque.estoque_ideal) / Estoque.estoque_ideal
+        ) * 100.0
+    ).label("difference_percent")
+
+    abs_difference_percent = case(
+        (
+            (Estoque.estoque_ideal == 0) & (Estoque.quantidade_disponivel > 0),
+            9999999.0
+        ),
+        (
+            (Estoque.estoque_ideal == 0) & (Estoque.quantidade_disponivel <= 0),
+            0.0
+        ),
+        else_=func.abs(
+            (Estoque.quantidade_disponivel - Estoque.estoque_ideal) / Estoque.estoque_ideal
+        ) * 100.0
+    ).label("abs_difference_percent")
+
+    difference_quantity = cast(
+        (Estoque.quantidade_disponivel - Estoque.estoque_ideal), Integer
+    ).label("difference_quantity")
+    bigger_than_expected = case(
+        ((Estoque.quantidade_disponivel - Estoque.estoque_ideal) > 0, True),
+        else_=False
+    ).label("bigger_than_expected")
+
+    cash_loss = ((Estoque.quantidade_disponivel - Estoque.estoque_ideal) * Estoque.custo_medio).label("cash_loss")
+
+    stmt = (
+        select(
+            Estoque.id,
+            Estoque.id_produtos,
+            Estoque.quantidade_disponivel,
+            Estoque.custo_medio,
+            Estoque.estoque_ideal,
+            Estoque.created_at,
+            Estoque.updated_at,
+            
+            difference_percent_schema,
+            difference_quantity,
+            bigger_than_expected,
+            cash_loss,
+            abs_difference_percent
+        )
+        .join(Produto, Estoque.id_produtos == Produto.id) 
+        .where(
+            and_(
+                Estoque.estoque_ideal.isnot(None),
+                Produto.id_empresas == current_user.id_empresas 
+            )
+        )
+        .order_by(
+            abs_difference_percent.desc()
+        )
+        .limit(10)
+    )
+
+    result = await session.execute(stmt)
+    
+    df = pd.DataFrame(result.all())
+    
+
+    if df.empty:
+        return []
+
+    df['difference_percent'] = df['difference_percent'].fillna(0.0)
+
+    df = df.drop(columns=['abs_difference_percent'], errors='ignore')
+    stock_cols = [
+        "id", "id_produtos", "quantidade_disponivel", "custo_medio", 
+        "estoque_ideal", "created_at", "updated_at"
+    ]
+    
+    indicator_cols = [
+        "difference_percent", "difference_quantity", 
+        "bigger_than_expected", "cash_loss"
+    ]
+
+    response_data = []
+    
+    for _, row in df.iterrows():
+        stock_data = row[stock_cols].to_dict()
+        indicator_data = row[indicator_cols].to_dict()
+        
+        response_data.append({
+            "indicators": indicator_data,
+            "stock": stock_data
+        })
+        
+    return response_data
+    return df.to_dict(orient="records")
