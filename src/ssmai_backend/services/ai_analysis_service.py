@@ -13,8 +13,8 @@ from sklearn.preprocessing import LabelEncoder
 from prophet import Prophet
 
 
-async def generate_dataset_moviments(session):
-    subquery = (
+async def generate_dataset_moviments(session, id_produtos: int=None):
+    subquery_stmt = (
         select(
             MovimentacoesEstoque.id_produtos.label("id_produto"),
             func.date(MovimentacoesEstoque.date).label("data"),
@@ -28,8 +28,10 @@ async def generate_dataset_moviments(session):
             func.sum(MovimentacoesEstoque.total).label("valor_total")
         )
         .group_by(MovimentacoesEstoque.id_produtos, func.date(MovimentacoesEstoque.date))
-        .subquery()
     )
+    if id_produtos is not None:
+        subquery_stmt = subquery_stmt.where(MovimentacoesEstoque.id_produtos == id_produtos)
+    subquery = subquery_stmt.subquery()
 
     query = (
         select(
@@ -51,8 +53,8 @@ async def generate_dataset_moviments(session):
     return dataset.all()
 
 
-async def generate_moviments_df(session):
-    dataset = await generate_dataset_moviments(session)
+async def generate_moviments_df(session, id_produtos: int=None):
+    dataset = await generate_dataset_moviments(session, id_produtos)
     df = pd.DataFrame(dataset, columns=[
         "id_produto",
         "categoria",
@@ -78,9 +80,10 @@ async def generate_moviments_df(session):
     return df
 
 
-async def prepare_dataframe_to_train(df_dataset: pd.DataFrame, product_id: int) -> pd.DataFrame:
-    df_prod: pd.DataFrame = df_dataset[df_dataset['id_produto'] == product_id]
-    df_prophet = df_prod[["data", "quantidade_saida"]].rename(columns={"data": "ds", "quantidade_saida": "y"})
+async def prepare_dataframe_to_train(df_dataset: pd.DataFrame, product_id: int = None) -> pd.DataFrame:
+    if product_id:
+        df_dataset: pd.DataFrame = df_dataset[df_dataset['id_produto'] == product_id]
+    df_prophet = df_dataset[["data", "quantidade_saida"]].rename(columns={"data": "ds", "quantidade_saida": "y"})
     df_prophet["ds"] = pd.to_datetime(df_prophet["ds"])
     df_prophet = df_prophet.sort_values("ds")
     full_range = pd.date_range(df_prophet["ds"].min(), df_prophet["ds"].max(), freq="D")
@@ -122,38 +125,28 @@ async def create_df_by_object_model_list(obj_list: list[ScalarResult]):
     return pd.DataFrame(data)
 
 
+async def update_by_product_id_service(current_user, session, product_id):
+    ai_model = Prophet()
+    df_dataset = await generate_moviments_df(session, product_id)
+    df_to_prophet = await prepare_dataframe_to_train(df_dataset)
+    df_forecast = await create_forecast(df_to_prophet, ai_model)
+    await add_forecast_on_db_by_product_id(product_id, df_forecast, session)
+    await session.commit()
+    return {"message": 'Coleta realizada'}
+
+
 async def update_ai_predictions_to_enterpryse_service(
     current_user: User,
-    s3_client,
     session: AsyncSession
 ):
-    SETTINGS = Settings()
-    filename_with_ext = (
-        f'uploads/{current_user.id_empresas}/files_to_ai/moviments_dataset.csv'
-    )
-    """
-    ds, yhat, 
-    """
     df_dataset = await generate_moviments_df(session)
     product_ids = df_dataset['id_produto'].unique()
     for product_id in product_ids:
         ai_model = Prophet()
         df_to_prophet = await prepare_dataframe_to_train(df_dataset, product_id)
         df_forecast = await create_forecast(df_to_prophet, ai_model)
-        print(df_forecast)
         await add_forecast_on_db_by_product_id(product_id, df_forecast, session)
     await session.commit()
-
-
-    # csv_buffer = io.BytesIO()
-    # df_dataset.to_csv(csv_buffer, index=False)
-    # csv_buffer.seek(0)
-    # await s3_client.upload_fileobj(
-    #         csv_buffer,
-    #         SETTINGS.S3_BUCKET,
-    #         filename_with_ext,
-    #     )
-
     return {"message": 'Coleta realizada'}
 
 
@@ -229,7 +222,7 @@ async def get_graph_data_by_product_id_service(
         .order_by(Previsoes.data.asc())
     )
     result_prev = await session.execute(stmt_prev)
-    previsoes = [{"data": r.data, "estoque_previsto": r.estoque_previsto} for r in result_prev]
+    previsoes = [{"data": r.data, "estoque_previsto": int(r.estoque_previsto)} for r in result_prev]
     return {
         "historico": historico,
         "previsoes": previsoes

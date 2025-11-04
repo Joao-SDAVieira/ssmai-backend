@@ -15,7 +15,7 @@ class HistoricoItem(BaseModel):
 
 class PrevisaoItem(BaseModel):
     data: datetime
-    estoque_previsto: float
+    estoque_previsto: int
 
 class PrevisoesResponse(BaseModel):
     historico: list[HistoricoItem]

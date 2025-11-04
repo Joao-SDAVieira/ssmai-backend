@@ -11,7 +11,7 @@ from ssmai_backend.routers.users import fastapi_users
 
 from ssmai_backend.schemas.root_schemas import Message
 from ssmai_backend.schemas.ai_analysis_schemas import AnalysisSchema, PrevisoesResponse
-from ssmai_backend.services.ai_analysis_service import update_ai_predictions_to_enterpryse_service, get_analysis_by_product_id_service, get_graph_data_by_product_id_service
+from ssmai_backend.services.ai_analysis_service import update_ai_predictions_to_enterpryse_service, get_analysis_by_product_id_service, get_graph_data_by_product_id_service, update_by_product_id_service
 
 
 router = APIRouter(prefix="/ai_analysis", tags=["ai_analysis"])
@@ -25,10 +25,18 @@ T_Session = Annotated[AsyncSession, Depends(get_session)]
 async def update_batch(
     current_user: T_CurrentUser,
     session: T_Session,
-    s3_client=Depends(get_s3_client)
     
 ):
-    return await update_ai_predictions_to_enterpryse_service(current_user, s3_client, session)
+    return await update_ai_predictions_to_enterpryse_service(current_user, session)
+
+
+@router.put("/{product_id}", response_model=Message)
+async def update_by_product_id(
+    current_user: T_CurrentUser,
+    session: T_Session,
+    product_id: int,
+):
+    return await update_by_product_id_service(current_user, session, product_id)
 
 
 @router.get("/{product_id}", response_model=AnalysisSchema)
@@ -36,7 +44,7 @@ async def get_analysis_by_product_id(
     current_user: T_CurrentUser,
     session: T_Session,
     product_id: int,
-    service_level: float=0.95, # perguntar qual nivel de exposição ao risco
+    service_level: float=0.95,
     lead_time: int=7
 ):
     return await get_analysis_by_product_id_service(product_id, session, service_level, lead_time)
