@@ -9,6 +9,7 @@ import sys
 import logging
 from typing import Any, Dict, List, Optional, Union
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -87,6 +88,20 @@ class PostgreSQLMCPServer:
                         }
                     },
                     "required": ["table_name"]
+                }
+            },
+            {
+                "name": "get_current_date",
+                "description": "Get the current date and time",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "format": {
+                            "type": "string",
+                            "description": "Optional date format string (default: '%Y-%m-%d %H:%M:%S')",
+                            "default": "%Y-%m-%d %H:%M:%S"
+                        }
+                    }
                 }
             }
         ]
@@ -280,6 +295,35 @@ class PostgreSQLMCPServer:
                 "content": f"Error counting records: {str(e)}"
             }
 
+    def get_current_date(self, format_str: str = "%Y-%m-%d %H:%M:%S") -> Dict[str, Any]:
+        """Get the current date and time"""
+        try:
+            logger.info("🔧 DEBUG: Obtendo data atual...")
+            current_date = datetime.now()
+            
+            # Format the date
+            formatted_date = current_date.strftime(format_str)
+            
+            # Additional information
+            weekday = current_date.strftime("%A")
+            month_name = current_date.strftime("%B")
+            
+            logger.info(f"🔧 DEBUG: Data atual obtida com sucesso: {formatted_date}")
+            
+            return {
+                "content": f"Data e hora atual: {formatted_date}\n"
+                          f"Dia da semana: {weekday}\n"
+                          f"Mês: {month_name}\n"
+                          f"Ano: {current_date.year}\n"
+                          f"Timestamp Unix: {int(current_date.timestamp())}"
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao obter data atual: {e}")
+            return {
+                "content": f"Error getting current date: {str(e)}"
+            }
+
     def call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Call a specific tool"""
         logger.info(f"🔧 DEBUG: Executando tool '{name}' com args: {arguments}")
@@ -293,6 +337,8 @@ class PostgreSQLMCPServer:
                 return self.describe_table(arguments.get("table_name", ""))
             elif name == "count_records":
                 return self.count_records(arguments.get("table_name", ""))
+            elif name == "get_current_date":
+                return self.get_current_date(arguments.get("format", "%Y-%m-%d %H:%M:%S"))
             else:
                 return {
                     "content": f"Unknown tool: {name}"
