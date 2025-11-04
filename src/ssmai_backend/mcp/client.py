@@ -62,6 +62,8 @@ class MCPClient:
         - NUNCA mostrar dados de outras empresas
         - Usar sempre filtros WHERE id_empresas = [ID_DA_EMPRESA]
         - Para consultas em estoque/movimentações, fazer JOIN com produtos para filtrar por empresa
+        - NUNCA mencionar IDs de empresa nas respostas ao usuário
+        - NUNCA mencionar ferramentas técnicas ou processos internos
 
         Suas Capacidades:
         - Consultar produtos, categorias e estoques da empresa do usuário
@@ -80,14 +82,23 @@ class MCPClient:
         - Transações ou movimentações fictícias
 
         Estilo de Resposta:
-        - Seja conciso e direto (máximo de 4–5 linhas)
+        - Seja conciso e direto 
         - Utilize apenas dados reais da empresa do usuário
         - Evite explicações longas ou especulações
         - Priorize clareza e objetividade
+        - NUNCA mencione IDs de empresa, ferramentas ou processos técnicos
+        - Responda de forma natural, como se fosse um assistente humano
 
         Exemplo de Resposta Correta:
-        Com dados: "Sua empresa possui 15 unidades do produto X em estoque."
-        Sem dados: "Não foram encontradas movimentações para sua empresa neste período.\""""
+        Com dados: "Você possui 15 unidades do produto X em estoque."
+        Sem dados: "Não foram encontradas movimentações neste período."
+        
+        PROIBIDO mencionar:
+        - "empresa ID X"
+        - "para a empresa X"
+        - "verificando dados da empresa"
+        - "[Calling tool...]"
+        - Qualquer referência técnica interna\""""
 
     async def connect_to_server(self, server_path: str):
         """Connect to MCP server"""
@@ -354,20 +365,27 @@ Principais tabelas: {main_tables_str}"""
         return context
 
     def _clean_response(self, response: str) -> str:
-        """Remove technical messages from AI response"""
+        """Remove technical messages and company references from AI response"""
         logger.info(f"🧹 Cleaning response with {len(response.split())} lines")
         lines = response.split('\n')
         filtered_lines = []
         removed_lines = []
         
         tech_patterns = [
-            re.compile(r'^\[Calling tool .* with args .*\]$'),
+            re.compile(r'^\[Calling tool .* with.*\]$'),
             re.compile(r'^\[Tool call:.*\]$'),
             re.compile(r'^\[Using tool:.*\]$'),
             re.compile(r'^\[Executing:.*\]$'),
             re.compile(r'^Tool result:', re.IGNORECASE),
             re.compile(r'^Calling function:', re.IGNORECASE),
-            re.compile(r'^Function call:', re.IGNORECASE)
+            re.compile(r'^Function call:', re.IGNORECASE),
+            # Remove company ID references
+            re.compile(r'.*empresa ID \d+.*', re.IGNORECASE),
+            re.compile(r'.*para a empresa \d+.*', re.IGNORECASE),
+            re.compile(r'.*da empresa \d+.*', re.IGNORECASE),
+            # Remove verification messages
+            re.compile(r'^Vou verificar.*empresa.*', re.IGNORECASE),
+            re.compile(r'^Para responder.*empresa.*', re.IGNORECASE),
         ]
         
         for line in lines:
@@ -378,7 +396,7 @@ Principais tabelas: {main_tables_str}"""
                 removed_lines.append(line_stripped)
         
         if removed_lines:
-            logger.info(f"🗑️  Removed {len(removed_lines)} technical lines")
+            logger.info(f"🗑️  Removed {len(removed_lines)} technical/company ID lines")
         
         cleaned = '\n'.join(filtered_lines).strip()
         logger.info(f"🧹 Cleaning complete: {len(cleaned)} characters final")
@@ -517,6 +535,14 @@ Principais tabelas: {main_tables_str}"""
             - Para movimentações: JOIN com produtos WHERE produtos.id_empresas = {company_id}
             - NUNCA mostrar dados de outras empresas
             - Se não encontrar dados para esta empresa, informar que não há dados disponíveis
+            
+            REGRAS DE RESPOSTA AO USUÁRIO:
+            - NUNCA mencione "empresa ID {company_id}" ou similar
+            - NUNCA fale sobre "verificar dados da empresa X"
+            - Responda como se os dados fossem naturalmente do usuário
+            - Use "Você possui" ao invés de "Sua empresa possui"
+            - Use "Seu estoque" ao invés de "Estoque da empresa"
+            - Seja direto e natural na comunicação
             """
             
             # Create message with context including company filter
@@ -581,8 +607,7 @@ Principais tabelas: {main_tables_str}"""
                     # Call the MCP tool
                     result = await self.call_tool(tool_name, tool_args)
                     
-                    # Add technical message (will be filtered later)
-                    final_text.append(f"[Calling tool {tool_name} with company-filtered args]")
+                    # Skip technical messages - they will be filtered out
                     
                     # Handle follow-up with tool result
                     messages.append({
@@ -740,12 +765,11 @@ Principais tabelas: {main_tables_str}"""
     def _validate_company_access(self, query_result: str, company_id: int) -> str:
         """Validate that query results don't contain data from other companies"""
         try:
-            # Add a prefix to make it clear this is company-specific data
-            validated_result = f"📊 **Dados da sua empresa (ID: {company_id})**\n\n{query_result}"
-            
             # Log for security audit
             logger.info(f"🔒 Company data access validated for company {company_id}")
-            return validated_result
+            
+            # Return clean result without company ID exposure
+            return query_result
             
         except Exception as e:
             logger.error(f"Error validating company access: {e}")
