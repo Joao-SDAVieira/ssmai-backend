@@ -2,12 +2,15 @@
 SSMai API - Chatbot Router for Smart Stock Management AI
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 import logging
 import time
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Annotated
 from datetime import datetime
+
+from ssmai_backend.models.user import User
+from ssmai_backend.routers.users import fastapi_users
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,17 +39,22 @@ router = APIRouter(
     tags=["chatbot"]
 )
 
+# Type alias for current user dependency
+T_CurrentUser = Annotated[User, Depends(fastapi_users.current_user())]
+
 @router.post("/chat", response_model=ChatResponse)
-async def chat_with_ssmai(request: ChatRequest):
+async def chat_with_ssmai(request: ChatRequest, current_user: T_CurrentUser):
     """
     Chat with SSMai Assistant - Uses global MCP connection from main app
     
     The assistant can answer questions about:
-    - Product inventory and counts
-    - Stock movements and transactions  
-    - Company information
+    - Product inventory and counts (filtered by user's company)
+    - Stock movements and transactions (filtered by user's company)
+    - Company information (user's company only)
     - Database structure and relationships
-    - System summaries and reports
+    - System summaries and reports (filtered by user's company)
+    
+    Requires authentication. Only returns data from the user's company.
     """
     # Import here to avoid circular imports
     from ssmai_backend.globals import mcp_container
@@ -67,10 +75,10 @@ async def chat_with_ssmai(request: ChatRequest):
     user_query = request.message
     
     try:
-        logger.info(f"💬 Processing query: {user_query}")
+        logger.info(f"💬 Processing query for user {current_user.id} from company {current_user.id_empresas}: {user_query}")
         
         start_time = time.time()
-        response = await mcp_container.client.process_query(user_query)
+        response = await mcp_container.client.process_query_with_company_filter(user_query, current_user.id_empresas)
         processing_time = time.time() - start_time
         
         return ChatResponse(
@@ -90,8 +98,8 @@ async def chat_with_ssmai(request: ChatRequest):
         )
 
 @router.get("/database/info")
-async def get_database_info():
-    """Get database information"""
+async def get_database_info(current_user: T_CurrentUser):
+    """Get database information (filtered by user's company)"""
     from ssmai_backend.globals import mcp_container
     
     if not mcp_container.client:
@@ -128,15 +136,18 @@ async def get_database_info():
         )
 
 @router.get("/products/count")
-async def get_products_count():
-    """Get product count - Quick endpoint to get the total number of products"""
+async def get_products_count(current_user: T_CurrentUser):
+    """Get product count - Quick endpoint to get the total number of products from user's company"""
     from ssmai_backend.globals import mcp_container
     
     if not mcp_container.client:
         raise HTTPException(status_code=503, detail={"error": "MCP service unavailable"})
     
     try:
-        response = await mcp_container.client.process_query('Quantos produtos temos no total?')
+        response = await mcp_container.client.process_query_with_company_filter(
+            f'Quantos produtos temos no total da empresa {current_user.id_empresas}?', 
+            current_user.id_empresas
+        )
         return {
             "count": response,
             "timestamp": datetime.now().isoformat()
@@ -145,15 +156,18 @@ async def get_products_count():
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
 @router.get("/stock/summary")
-async def get_stock_summary():
-    """Get system summary - Quick endpoint to get a comprehensive summary"""
+async def get_stock_summary(current_user: T_CurrentUser):
+    """Get system summary - Quick endpoint to get a comprehensive summary from user's company"""
     from ssmai_backend.globals import mcp_container
     
     if not mcp_container.client:
         raise HTTPException(status_code=503, detail={"error": "MCP service unavailable"})
     
     try:
-        response = await mcp_container.client.process_query('Mostre um resumo do sistema: produtos, empresas e movimentações')
+        response = await mcp_container.client.process_query_with_company_filter(
+            f'Mostre um resumo do sistema da empresa {current_user.id_empresas}: produtos, movimentações e estoque', 
+            current_user.id_empresas
+        )
         return {
             "summary": response,
             "timestamp": datetime.now().isoformat()

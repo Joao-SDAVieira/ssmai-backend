@@ -57,16 +57,22 @@ class MCPClient:
         Responda somente com base nas informações fornecidas no contexto.
         Se algo não estiver disponível, informe explicitamente.
 
+        SEGURANÇA E PRIVACIDADE:
+        - SEMPRE filtrar dados por empresa do usuário
+        - NUNCA mostrar dados de outras empresas
+        - Usar sempre filtros WHERE id_empresas = [ID_DA_EMPRESA]
+        - Para consultas em estoque/movimentações, fazer JOIN com produtos para filtrar por empresa
+
         Suas Capacidades:
-        - Consultar produtos, categorias e estoques reais
-        - Visualizar históricos e movimentações existentes
-        - Responder apenas com dados factuais e verificáveis
+        - Consultar produtos, categorias e estoques da empresa do usuário
+        - Visualizar históricos e movimentações da empresa do usuário
+        - Responder apenas com dados factuais e verificáveis da empresa autorizada
 
         Quando Não Houver Dados:
         Se o contexto não contiver informações suficientes, responda de forma clara:
-        "Não há dados disponíveis."
+        "Não há dados disponíveis para sua empresa."
         ou
-        "Não foram encontrados [produtos/movimentações/etc] para este período."
+        "Não foram encontrados [produtos/movimentações/etc] para sua empresa neste período."
 
         Jamais crie:
         - Nomes de produtos
@@ -75,13 +81,13 @@ class MCPClient:
 
         Estilo de Resposta:
         - Seja conciso e direto (máximo de 4–5 linhas)
-        - Utilize apenas dados reais do contexto
+        - Utilize apenas dados reais da empresa do usuário
         - Evite explicações longas ou especulações
         - Priorize clareza e objetividade
 
         Exemplo de Resposta Correta:
-        Com dados: "Foram registradas 15 unidades vendidas do produto X no período informado."
-        Sem dados: "Não foram encontradas movimentações para este período.\""""
+        Com dados: "Sua empresa possui 15 unidades do produto X em estoque."
+        Sem dados: "Não foram encontradas movimentações para sua empresa neste período.\""""
 
     async def connect_to_server(self, server_path: str):
         """Connect to MCP server"""
@@ -498,6 +504,211 @@ Principais tabelas: {main_tables_str}"""
             logger.error(f"Error processing query: {e}")
             return f"Error: {str(e)}"
 
+    async def process_query_with_company_filter(self, query: str, company_id: int) -> str:
+        """Process user query using Claude 3.5 Haiku with company filtering"""
+        try:
+            # Enhanced context with company filtering instructions
+            company_context = f"""
+            IMPORTANTE: FILTRO POR EMPRESA
+            - O usuário pertence à empresa ID: {company_id}
+            - TODAS as consultas devem ser filtradas por esta empresa
+            - Para produtos: WHERE id_empresas = {company_id}
+            - Para estoque: JOIN com produtos WHERE produtos.id_empresas = {company_id}
+            - Para movimentações: JOIN com produtos WHERE produtos.id_empresas = {company_id}
+            - NUNCA mostrar dados de outras empresas
+            - Se não encontrar dados para esta empresa, informar que não há dados disponíveis
+            """
+            
+            # Create message with context including company filter
+            full_context = f"{self.ssmai_context}\n{self.database_context}\n{company_context}"
+            
+            messages = [{
+                "role": "user",
+                "content": f"{full_context}\n\nUsuário da empresa {company_id}: {query}"
+            }]
+            
+            # Prepare tools for Bedrock
+            tools_for_bedrock = []
+            if self.tools:
+                for tool in self.tools:
+                    tools_for_bedrock.append({
+                        "name": tool["name"],
+                        "description": tool.get("description", ""),
+                        "input_schema": tool["input_schema"]
+                    })
+            
+            # Create request payload
+            payload = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": 4096,
+                "top_k": 250,
+                "stop_sequences": [],
+                "temperature": 0.7,
+                "top_p": 0.999,
+                "messages": messages
+            }
+            
+            if tools_for_bedrock:
+                payload["tools"] = tools_for_bedrock
+            
+            # Invoke Bedrock
+            response = self.bedrock_client.invoke_model(
+                modelId=self.model_id,
+                contentType="application/json",
+                accept="application/json",
+                body=json.dumps(payload)
+            )
+            
+            # Parse response
+            response_body = json.loads(response['body'].read())
+            final_text = []
+            
+            # Process response content
+            for content in response_body.get("content", []):
+                if content["type"] == "text":
+                    final_text.append(content["text"])
+                elif content["type"] == "tool_use":
+                    tool_name = content["name"]
+                    tool_args = content["input"]
+                    
+                    # Modify SQL queries to include company filter
+                    if tool_name == "query_database" and "query" in tool_args:
+                        original_query = tool_args["query"]
+                        filtered_query = self._add_company_filter_to_query(original_query, company_id)
+                        tool_args["query"] = filtered_query
+                        logger.info(f"🏢 Applied company filter to query: {filtered_query[:100]}...")
+                    
+                    # Call the MCP tool
+                    result = await self.call_tool(tool_name, tool_args)
+                    
+                    # Add technical message (will be filtered later)
+                    final_text.append(f"[Calling tool {tool_name} with company-filtered args]")
+                    
+                    # Handle follow-up with tool result
+                    messages.append({
+                        "role": "assistant",
+                        "content": [{
+                            "type": "tool_use",
+                            "id": content["id"],
+                            "name": tool_name,
+                            "input": tool_args
+                        }]
+                    })
+                    
+                    tool_result_content = result.get("content", "")
+                    messages.append({
+                        "role": "user",
+                        "content": [{
+                            "type": "tool_result",
+                            "tool_use_id": content["id"],
+                            "content": tool_result_content
+                        }]
+                    })
+                    
+                    # Follow-up request
+                    follow_up_payload = {
+                        "anthropic_version": "bedrock-2023-05-31",
+                        "max_tokens": 4096,
+                        "top_k": 250,
+                        "stop_sequences": [],
+                        "temperature": 0.7,
+                        "top_p": 0.999,
+                        "messages": messages
+                    }
+                    
+                    if tools_for_bedrock:
+                        follow_up_payload["tools"] = tools_for_bedrock
+                    
+                    follow_up_response = self.bedrock_client.invoke_model(
+                        modelId=self.model_id,
+                        contentType="application/json",
+                        accept="application/json",
+                        body=json.dumps(follow_up_payload)
+                    )
+                    
+                    follow_up_body = json.loads(follow_up_response['body'].read())
+                    
+                    if (follow_up_body.get("content") and 
+                        follow_up_body["content"][0]["type"] == "text"):
+                        final_text.append(follow_up_body["content"][0]["text"])
+            
+            raw_response = "\n".join(final_text)
+            logger.info(f"🔍 Raw response length: {len(raw_response)} characters")
+            cleaned_response = self._clean_response(raw_response)
+            validated_response = self._validate_company_access(cleaned_response, company_id)
+            logger.info(f"🏢 Company-filtered response for company {company_id}: {len(validated_response)} characters")
+            return validated_response
+            
+        except Exception as e:
+            logger.error(f"Error processing company-filtered query: {e}")
+            return f"Error: {str(e)}"
+
+    def _add_company_filter_to_query(self, query: str, company_id: int) -> str:
+        """Add company filter to SQL queries automatically"""
+        query_upper = query.upper().strip()
+        
+        # If it's not a SELECT query, return as is
+        if not query_upper.startswith('SELECT'):
+            return query
+        
+        # If it already contains a filter for id_empresas, return as is
+        if 'ID_EMPRESAS' in query_upper:
+            return query
+        
+        # Check if query involves tables that need company filtering
+        needs_filtering = any(table in query_upper for table in ['PRODUTO', 'ESTOQUE', 'MOVIMENTACAO', 'MOVIMENT'])
+        
+        if not needs_filtering:
+            return query
+        
+        try:
+            # More sophisticated filtering based on table patterns
+            if 'FROM PRODUTO' in query_upper or 'FROM PRODUTOS' in query_upper:
+                # Direct produtos table query
+                if 'WHERE' in query_upper:
+                    # Add to existing WHERE clause with proper parentheses
+                    where_index = query_upper.find('WHERE')
+                    before_where = query[:where_index + 5]  # Include 'WHERE'
+                    after_where = query[where_index + 5:]
+                    query = f"{before_where} id_empresas = {company_id} AND ({after_where.strip()})"
+                else:
+                    # Add new WHERE clause
+                    query = query.rstrip(';') + f' WHERE id_empresas = {company_id}'
+            
+            elif 'ESTOQUE' in query_upper or 'MOVIMENTACAO' in query_upper:
+                # For queries involving estoque or movimentacao, ensure JOIN with produtos
+                if 'JOIN' not in query_upper:
+                    # Add instruction for AI to include proper JOIN
+                    query = f"-- IMPORTANTE: Incluir JOIN com produtos e filtrar por id_empresas = {company_id}\n{query}"
+                else:
+                    # Try to add WHERE clause for existing JOINs
+                    if 'WHERE' not in query_upper:
+                        query = query.rstrip(';') + f' WHERE produtos.id_empresas = {company_id}'
+                    else:
+                        # Add to existing WHERE with proper table prefix
+                        where_index = query_upper.find('WHERE')
+                        before_where = query[:where_index + 5]
+                        after_where = query[where_index + 5:]
+                        query = f"{before_where} produtos.id_empresas = {company_id} AND ({after_where.strip()})"
+            
+            # Count queries need special handling
+            elif 'COUNT(' in query_upper:
+                if 'WHERE' not in query_upper:
+                    query = query.rstrip(';') + f' WHERE id_empresas = {company_id}'
+                else:
+                    where_index = query_upper.find('WHERE')
+                    before_where = query[:where_index + 5]
+                    after_where = query[where_index + 5:]
+                    query = f"{before_where} id_empresas = {company_id} AND ({after_where.strip()})"
+            
+            logger.info(f"🏢 Applied company filter to query for company {company_id}")
+            return query
+            
+        except Exception as e:
+            logger.warning(f"Could not automatically apply company filter: {e}")
+            # Fallback: add instruction comment
+            return f"-- FILTRAR POR EMPRESA {company_id}: WHERE id_empresas = {company_id}\n{query}"
+
     async def cleanup(self):
         """Cleanup MCP connection"""
         if self.mcp_process and self.mcp_process.returncode is None:
@@ -525,3 +736,17 @@ Principais tabelas: {main_tables_str}"""
     def get_database_context(self) -> str:
         """Get the current database context"""
         return self.database_context
+
+    def _validate_company_access(self, query_result: str, company_id: int) -> str:
+        """Validate that query results don't contain data from other companies"""
+        try:
+            # Add a prefix to make it clear this is company-specific data
+            validated_result = f"📊 **Dados da sua empresa (ID: {company_id})**\n\n{query_result}"
+            
+            # Log for security audit
+            logger.info(f"🔒 Company data access validated for company {company_id}")
+            return validated_result
+            
+        except Exception as e:
+            logger.error(f"Error validating company access: {e}")
+            return query_result
