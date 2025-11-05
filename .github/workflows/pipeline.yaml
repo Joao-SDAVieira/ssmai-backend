@@ -1,0 +1,39 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Acessar EC2 e fazer deploy
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "📁 Acessando projeto"
+            cd /home/<seu_usuario>/projects/ssmai-backend/
+
+            echo "🔄 Atualizando repositório"
+            git fetch origin
+            git reset --hard
+            git clean -fd -e .env
+            git checkout main
+            git pull origin main
+
+            echo "🧨 Parando containers antigos"
+            docker compose down --remove-orphans
+
+            echo "🧱 Buildando imagem sem cache"
+            docker compose build --no-cache
+
+            echo "🚀 Subindo containers"
+            docker compose up -d
+
+            echo "📜 Logs recentes do backend"
+            docker compose logs --tail=50
