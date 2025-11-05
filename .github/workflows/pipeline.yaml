@@ -17,7 +17,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             echo "📁 Acessando projeto"
-            cd home/ubuntu/projects/ssmai_project/ssmai-backend
+            cd /home/${{ secrets.EC2_USER }}/projects/ssmai_project/ssmai-backend
 
             echo "🔄 Atualizando repositório"
             git fetch origin
