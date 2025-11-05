@@ -179,10 +179,12 @@ async def get_analysis_by_product_id_service(
     lead_time=2
 ):
     forecasts_db = await session.scalars(select(Previsoes).where(Previsoes.id_produtos == product_id))
-    if not forecasts_db.first():
+    forecasts_all = forecasts_db.all()
+    if not forecasts_all:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND,
                             detail='Forecast not found to this product')
-    df_forecast = await create_df_by_object_model_list(forecasts_db.all())
+
+    df_forecast = await create_df_by_object_model_list(forecasts_all)
 
     stock_db = await session.scalar(select(Estoque).where(Estoque.id_produtos == product_id))
 
