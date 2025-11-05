@@ -37,7 +37,7 @@ class Estoque:
     )
     quantidade_disponivel: Mapped[int]
     custo_medio: Mapped[float] = mapped_column(nullable=False)
-    estoque_ideal: Mapped[float] = mapped_column(nullable=True)
+    estoque_ideal: Mapped[float] = mapped_column(nullable=True, init=False)
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
     )

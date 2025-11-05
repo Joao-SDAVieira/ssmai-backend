@@ -1,6 +1,7 @@
 import io
 from scipy.stats import norm
 import numpy as np
+from http import HTTPStatus
 
 from ssmai_backend.models.user import User
 from ssmai_backend.models.produto import MovimentacoesEstoque, Produto, Estoque, Previsoes
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 from prophet import Prophet
+from fastapi import HTTPException
 
 
 async def generate_dataset_moviments(session, id_produtos: int=None):
@@ -51,7 +53,11 @@ async def generate_dataset_moviments(session, id_produtos: int=None):
     )
 
     dataset = await session.execute(query)
-    return dataset.all()
+    moviments = dataset.all()
+    if len(moviments) == 0:
+        raise HTTPException(status_code=HTTPStatus.CONFLICT,
+                            detail='Product without moviments')
+    return moviments
 
 
 async def generate_moviments_df(session, id_produtos: int=None):
@@ -173,7 +179,9 @@ async def get_analysis_by_product_id_service(
     lead_time=2
 ):
     forecasts_db = await session.scalars(select(Previsoes).where(Previsoes.id_produtos == product_id))
-
+    if not forecasts_db.first():
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND,
+                            detail='Forecast not found to this product')
     df_forecast = await create_df_by_object_model_list(forecasts_db.all())
 
     stock_db = await session.scalar(select(Estoque).where(Estoque.id_produtos == product_id))
@@ -217,6 +225,8 @@ async def get_graph_data_by_product_id_service(
 
     result_hist = await session.execute(stmt_hist)
     historico = [{"data": r.data, "estoque": r.saida_dia} for r in result_hist]
+    if len(historico) == 0:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Without moviments to this product')
 
     ultima_data = historico[-1]["data"] if historico else None
     
@@ -235,7 +245,6 @@ async def get_graph_data_by_product_id_service(
     )
     result_prev = await session.execute(stmt_prev)
     
-    # Mudei o nome da chave para 'saida_prevista' para clareza
     previsoes = [{"data": r.data, "saida_prevista": int(r.saida_prevista)} for r in result_prev]
     return {
         "historico": historico,

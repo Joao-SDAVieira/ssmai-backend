@@ -15,7 +15,7 @@ class StockBase(BaseModel):
 
 
 class StockModel(StockBase):
-   estoque_ideal: float
+   estoque_ideal: float | None
 
 
 class MovimentBaseModel(BaseModel):
