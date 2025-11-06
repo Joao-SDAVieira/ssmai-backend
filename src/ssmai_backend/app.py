@@ -5,7 +5,7 @@ from sys import platform
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ssmai_backend.routers import enterprises, products, stock, ai_analysis
+from ssmai_backend.routers import ai_analysis, enterprises, products, stock
 from ssmai_backend.routers.users import fastapi_users, inject_creator, router
 from ssmai_backend.schemas.root_schemas import Message
 from ssmai_backend.schemas.users_schemas import (

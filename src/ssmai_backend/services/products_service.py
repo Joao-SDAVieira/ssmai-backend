@@ -4,11 +4,11 @@ from uuid import uuid4
 
 import pandas as pd
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import and_, insert, select, delete
+from sqlalchemy import and_, delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.models.document import Document
-from ssmai_backend.models.produto import Estoque, Produto, Previsoes
+from ssmai_backend.models.produto import Estoque, Previsoes, Produto
 from ssmai_backend.models.user import User
 from ssmai_backend.schemas.products_schemas import ProductSchema
 from ssmai_backend.schemas.root_schemas import FilterPage
@@ -571,7 +571,7 @@ from ssmai_backend.settings import Settings
 
 def get_bedrock_prompt(text_extracted: str):
     # text_extracted = get_text_extracted()
-    
+
     prompt = f"""
         Você é um extrator de produtos. Receberá um TEXTO CRU extraído por OCR. 
         Extrair e devolver **apenas JSON válido** com os campos:
@@ -746,7 +746,6 @@ async def create_product_by_document_service(
     IMAGE_MIME_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
     ext = document.filename.split('.')[-1]
 
-
     filename_with_ext = (
         f'uploads/{current_user.id_empresas}/documents_to_extract/{uuid4()}.{ext}'
     )
@@ -759,7 +758,7 @@ async def create_product_by_document_service(
             ExtraArgs={'ContentType': 'image/jpeg'},
         )
 
-    document_db = Document(extracted=False, id_empresas= current_user.id_empresas,
+    document_db = Document(extracted=False, id_empresas=current_user.id_empresas,
              document_path=f'https://{SETTINGS.S3_BUCKET}.s3.{SETTINGS.REGION}.amazonaws.com/{filename_with_ext}')
     session.add(document_db)
     await session.commit()
@@ -919,14 +918,14 @@ async def delete_all_products_by_enterpryse_id_service(
         delete(Produto)
         .where(Produto.id_empresas == enterpryse_id)
         )
-    
+
     await session.commit()
     return {'message': 'deleted!'}
 
 
-async def create_product_by_document_service_fake(current_user: User,document, session: AsyncSession):
-    document =  Document(extracted=False,
-             document_path=f'https://fake.s3.fake.amazonaws.com/fake.com')
+async def create_product_by_document_service_fake(current_user: User, document, session: AsyncSession):
+    document = Document(extracted=False,
+             document_path='https://fake.s3.fake.amazonaws.com/fake.com')
     document.extract_result = 'get_text_extracted()'
     document.extracted = True
     document.id_empresas = current_user.id_empresas
@@ -942,7 +941,7 @@ async def get_all_products_with_analysis_service(
         filter: FilterPage,
         current_user: User
 ):
-    
+
     stmt_join = (
     select(Produto)
     .join(Previsoes, Produto.id == Previsoes.id_produtos)
@@ -972,11 +971,11 @@ async def update_product_image_service(
             status_code=HTTPStatus.BAD_REQUEST, detail='Unsupported file type'
         )
     filename_with_ext = f'uploads/{current_user.id_empresas}/product/{product_id}/image.{ext}'
-    
+
     product_db = await session.scalar(select(Produto).where(
-        and_(Produto.id_empresas == current_user.id_empresas,Produto.id == product_id)
+        and_(Produto.id_empresas == current_user.id_empresas, Produto.id == product_id)
         ))
-    
+
     if not product_db:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail='Product not found!')
 
@@ -987,7 +986,6 @@ async def update_product_image_service(
         ExtraArgs={'ContentType': 'image/jpeg'},
     )
 
-    
     product_db.image = f'https://{settings.S3_BUCKET}.s3.{settings.REGION}.amazonaws.com/{filename_with_ext}'
     await session.commit()
 

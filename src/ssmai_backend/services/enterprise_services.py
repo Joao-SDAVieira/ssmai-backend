@@ -2,9 +2,9 @@ import random
 from http import HTTPStatus
 
 from fastapi import HTTPException
+from fastapi_users.exceptions import UserAlreadyExists
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi_users.exceptions import UserAlreadyExists
 
 from ssmai_backend.models.produto import Empresa
 from ssmai_backend.models.user import User

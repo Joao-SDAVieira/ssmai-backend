@@ -9,6 +9,7 @@ class EnterpryseBase(BaseModel):
     nome: str
     ramo: str
 
+
 class EnterpryseSchema(EnterpryseBase):
     email: EmailStr
 

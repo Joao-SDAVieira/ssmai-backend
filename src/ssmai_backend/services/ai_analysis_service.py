@@ -1,22 +1,34 @@
-import io
-from scipy.stats import norm
-import numpy as np
 from http import HTTPStatus
 
-from ssmai_backend.models.user import User
-from ssmai_backend.models.produto import MovimentacoesEstoque, Produto, Estoque, Previsoes
-from ssmai_backend.settings import Settings
-
-from sqlalchemy import func, select, case, delete, insert, ScalarResult, and_, Integer
-from sqlalchemy.sql.expression import cast
-from sqlalchemy.ext.asyncio import AsyncSession
+import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
-from prophet import Prophet
 from fastapi import HTTPException
+from prophet import Prophet
+from scipy.stats import norm
+from sklearn.preprocessing import LabelEncoder
+from sqlalchemy import (
+    Integer,
+    ScalarResult,
+    and_,
+    case,
+    delete,
+    func,
+    insert,
+    select,
+)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.expression import cast
+
+from ssmai_backend.models.produto import (
+    Estoque,
+    MovimentacoesEstoque,
+    Previsoes,
+    Produto,
+)
+from ssmai_backend.models.user import User
 
 
-async def generate_dataset_moviments(session, id_produtos: int=None):
+async def generate_dataset_moviments(session, id_produtos: int = None):
     subquery_stmt = (
         select(
             MovimentacoesEstoque.id_produtos.label("id_produto"),
@@ -60,7 +72,7 @@ async def generate_dataset_moviments(session, id_produtos: int=None):
     return moviments
 
 
-async def generate_moviments_df(session, id_produtos: int=None):
+async def generate_moviments_df(session, id_produtos: int = None):
     dataset = await generate_dataset_moviments(session, id_produtos)
     df = pd.DataFrame(dataset, columns=[
         "id_produto",
@@ -81,7 +93,7 @@ async def generate_moviments_df(session, id_produtos: int=None):
     df["saldo_dia"] = df.groupby("id_produto")["quantidade_saida"].cumsum()
     le = LabelEncoder()
     df["categoria_encoded"] = le.fit_transform(df["categoria"])
-    
+
     df.drop(columns=['categoria'])
 
     return df
@@ -113,7 +125,7 @@ async def create_forecast(df_to_prophet: pd.DataFrame, ai_model: Prophet) -> pd.
 async def calculate_ideal_stock_by_df_forecast(df_forecast: pd.DataFrame):
     future_stock = df_forecast.tail(15)['saida_prevista']
     standart_deviation = future_stock.std()
-    lead_time=7
+    lead_time = 7
     diary_average = future_stock.mean()
     service_level = 0.95,
     score = norm.ppf(service_level)
@@ -135,13 +147,13 @@ async def add_forecast_on_db_by_product_id(product_id: int,
     forecast_dict = df_forecast.to_dict(orient="records")
     await session.execute(insert(Previsoes), forecast_dict)
     stock_db = await session.scalar(select(Estoque).where(Estoque.id_produtos == product_id))
-    estoque_ideal = await calculate_ideal_stock_by_df_forecast(df_forecast)  
+    estoque_ideal = await calculate_ideal_stock_by_df_forecast(df_forecast)
     stock_db.estoque_ideal = float(estoque_ideal.item())
 
 
 async def create_df_by_object_model_list(obj_list: list[ScalarResult]):
-    data = [ 
-    {key: value for key, value in obj.__dict__.items() if not key.startswith('_')} 
+    data = [
+    {key: value for key, value in obj.__dict__.items() if not key.startswith('_')}
     for obj in obj_list
     ]
     return pd.DataFrame(data)
@@ -175,7 +187,7 @@ async def update_ai_predictions_to_enterpryse_service(
 async def get_analysis_by_product_id_service(
     product_id: int,
     session: AsyncSession,
-    service_level: float=0.95,
+    service_level: float = 0.95,
     lead_time=2
 ):
     forecasts_db = await session.scalars(select(Previsoes).where(Previsoes.id_produtos == product_id))
@@ -201,9 +213,9 @@ async def get_analysis_by_product_id_service(
     faltante = ideal_stock - stock_db.quantidade_disponivel
     return {
         "diary_average": diary_average,
-        "demanda_leadtime": demanda_leadtime, #saida até reposição
-        "safety_stock": safety_stock, # estoque de sgurança, incrementa o stock ideal
-        "estoque_ideal": ideal_stock, # estoque ideal
+        "demanda_leadtime": demanda_leadtime,  # saida até reposição
+        "safety_stock": safety_stock,  # estoque de sgurança, incrementa o stock ideal
+        "estoque_ideal": ideal_stock,  # estoque ideal
         "pedir": faltante if faltante > 0 else 0
     }
 
@@ -231,7 +243,7 @@ async def get_graph_data_by_product_id_service(
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Without moviments to this product')
 
     ultima_data = historico[-1]["data"] if historico else None
-    
+
     stmt_prev = (
         select(
             Previsoes.data,
@@ -246,7 +258,7 @@ async def get_graph_data_by_product_id_service(
         .order_by(Previsoes.data.asc())
     )
     result_prev = await session.execute(stmt_prev)
-    
+
     previsoes = [{"data": r.data, "saida_prevista": int(r.saida_prevista)} for r in result_prev]
     return {
         "historico": historico,
@@ -255,10 +267,10 @@ async def get_graph_data_by_product_id_service(
 
 
 async def get_worst_stock_deviation_service(session: AsyncSession, current_user: User):
-    
+
     difference_percent_schema = case(
         (Estoque.estoque_ideal == 0, None),
-        else_ = (
+        else_=(
             (Estoque.quantidade_disponivel - Estoque.estoque_ideal) / Estoque.estoque_ideal
         ) * 100.0
     ).label("difference_percent")
@@ -296,18 +308,18 @@ async def get_worst_stock_deviation_service(session: AsyncSession, current_user:
             Estoque.estoque_ideal,
             Estoque.created_at,
             Estoque.updated_at,
-            
+
             difference_percent_schema,
             difference_quantity,
             bigger_than_expected,
             cash_loss,
             abs_difference_percent
         )
-        .join(Produto, Estoque.id_produtos == Produto.id) 
+        .join(Produto, Estoque.id_produtos == Produto.id)
         .where(
             and_(
                 Estoque.estoque_ideal.isnot(None),
-                Produto.id_empresas == current_user.id_empresas 
+                Produto.id_empresas == current_user.id_empresas
             )
         )
         .order_by(
@@ -317,9 +329,8 @@ async def get_worst_stock_deviation_service(session: AsyncSession, current_user:
     )
 
     result = await session.execute(stmt)
-    
+
     df = pd.DataFrame(result.all())
-    
 
     if df.empty:
         return []
@@ -328,25 +339,25 @@ async def get_worst_stock_deviation_service(session: AsyncSession, current_user:
 
     df = df.drop(columns=['abs_difference_percent'], errors='ignore')
     stock_cols = [
-        "id", "id_produtos", "quantidade_disponivel", "custo_medio", 
+        "id", "id_produtos", "quantidade_disponivel", "custo_medio",
         "estoque_ideal", "created_at", "updated_at"
     ]
-    
+
     indicator_cols = [
-        "difference_percent", "difference_quantity", 
+        "difference_percent", "difference_quantity",
         "bigger_than_expected", "cash_loss"
     ]
 
     response_data = []
-    
+
     for _, row in df.iterrows():
         stock_data = row[stock_cols].to_dict()
         indicator_data = row[indicator_cols].to_dict()
-        
+
         response_data.append({
             "indicators": indicator_data,
             "stock": stock_data
         })
-        
+
     return response_data
     return df.to_dict(orient="records")

@@ -22,17 +22,17 @@ from ssmai_backend.schemas.products_schemas import (
 from ssmai_backend.schemas.root_schemas import FilterPage, Message
 from ssmai_backend.services.products_service import (
     create_product_by_document_service,
+    create_product_by_document_service_fake,
     create_product_service,
+    delete_all_products_by_enterpryse_id_service,
     delete_product_by_id_service,
     generate_product_info_from_docs_pre_extracted_service,
+    get_all_products_with_analysis_service,
     insert_products_with_csv_service,
     read_all_products_by_user_enterpryse_service,
     read_all_products_service,
     update_product_by_id_service,
-    delete_all_products_by_enterpryse_id_service,
-    create_product_by_document_service_fake,
-    get_all_products_with_analysis_service,
-    update_product_image_service
+    update_product_image_service,
 )
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -164,7 +164,6 @@ async def delete_all_products_by_enterpryse_id(
     return await delete_all_products_by_enterpryse_id_service(
         session, enterpryse_id
     )
-
 
 
 @router.post('/extract_text_from_document/fake',
