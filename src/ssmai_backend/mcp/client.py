@@ -113,10 +113,8 @@ class MCPClient:
                 stderr=asyncio.subprocess.PIPE
             )
             
-            # Wait a bit for the server to start
             await asyncio.sleep(2)
             
-            # Check if process is still running
             if self.mcp_process.returncode is not None:
                 stderr_output = await self.mcp_process.stderr.read()
                 raise Exception(f"MCP server process failed to start: {stderr_output.decode()}")

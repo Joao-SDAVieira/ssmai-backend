@@ -121,84 +121,6 @@ async def chat_with_ssmai(request: ChatRequest, current_user: T_CurrentUser, ses
             ).dict()
         )
 
-@router.get("/database/info")
-async def get_database_info(current_user: T_CurrentUser):
-    """Get database information (filtered by user's company)"""
-    from ssmai_backend.globals import mcp_container
-    
-    if not mcp_container.client:
-        raise HTTPException(
-            status_code=503,
-            detail=ErrorResponse(
-                error="MCP service unavailable",
-                message="MCP server is not connected. The service starts automatically."
-            ).dict()
-        )
-    
-    try:
-        db_context = mcp_container.client.get_database_context()
-        
-        return {
-            "status": "success",
-            "database_info": {
-                "has_context": bool(db_context),
-                "context_length": len(db_context) if db_context else 0,
-                "summary": db_context[:500] + "..." if db_context else None
-            },
-            "tools": mcp_container.client.get_available_tools(),
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Database info error: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=ErrorResponse(
-                error="Failed to get database info",
-                message=str(e)
-            ).dict()
-        )
-
-@router.get("/products/count")
-async def get_products_count(current_user: T_CurrentUser):
-    """Get product count - Quick endpoint to get the total number of products from user's company"""
-    from ssmai_backend.globals import mcp_container
-    
-    if not mcp_container.client:
-        raise HTTPException(status_code=503, detail={"error": "MCP service unavailable"})
-    
-    try:
-        response = await mcp_container.client.process_query_with_company_filter(
-            f'Quantos produtos temos no total da empresa {current_user.id_empresas}?', 
-            current_user.id_empresas
-        )
-        return {
-            "count": response,
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail={"error": str(e)})
-
-@router.get("/stock/summary")
-async def get_stock_summary(current_user: T_CurrentUser):
-    """Get system summary - Quick endpoint to get a comprehensive summary from user's company"""
-    from ssmai_backend.globals import mcp_container
-    
-    if not mcp_container.client:
-        raise HTTPException(status_code=503, detail={"error": "MCP service unavailable"})
-    
-    try:
-        response = await mcp_container.client.process_query_with_company_filter(
-            f'Mostre um resumo do sistema da empresa {current_user.id_empresas}: produtos, movimentações e estoque', 
-            current_user.id_empresas
-        )
-        return {
-            "summary": response,
-            "timestamp": datetime.now().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail={"error": str(e)})
-
 @router.get("/status")
 async def get_mcp_status():
     """Get MCP service status"""
@@ -250,37 +172,6 @@ async def get_chat_history(
         )
 
 
-@router.get("/sessions", response_model=ChatSessionsResponse)
-async def get_chat_sessions(
-    current_user: T_CurrentUser,
-    session: T_Session,
-    limit: int = Query(20, ge=1, le=50, description="Maximum number of sessions to return")
-):
-    """
-    Get chat sessions for the current user
-    
-    Returns a summary of all chat sessions with their metadata.
-    """
-    try:
-        sessions = await ChatHistoryService.get_user_sessions(
-            session=session,
-            user=current_user,
-            limit=limit
-        )
-        return sessions
-        
-    except Exception as e:
-        logger.error(f"Error getting chat sessions: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=ErrorResponse(
-                error="Failed to get chat sessions",
-                message=str(e)
-            ).dict()
-        )
-
-
-@router.get("/sessions/{session_id}", response_model=List[ChatConversationResponse])
 async def get_session_conversations(
     session_id: str,
     current_user: T_CurrentUser,
@@ -355,33 +246,5 @@ async def clear_chat_history(
         )
 
 
-@router.post("/new-session")
-async def start_new_session(current_user: T_CurrentUser):
-    """
-    Start a new chat session for the current user
-    
-    Forces the creation of a new session, even if there's an active one.
-    Useful when the user wants to start a fresh conversation context.
-    """
-    try:
-        new_session_id = ChatHistoryService.generate_session_id()
-        
-        logger.info(f"🆕 Started new session {new_session_id} for user {current_user.id}")
-        
-        return {
-            "status": "success",
-            "message": "Nova sessão criada com sucesso",
-            "session_id": new_session_id,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        logger.error(f"Error starting new session: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=ErrorResponse(
-                error="Failed to start new session",
-                message=str(e)
-            ).dict()
-        )
+
 
