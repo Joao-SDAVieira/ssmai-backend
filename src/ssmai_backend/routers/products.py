@@ -30,7 +30,8 @@ from ssmai_backend.services.products_service import (
     read_all_products_service,
     update_product_by_id_service,
     delete_all_products_by_enterpryse_id_service,
-    create_product_by_document_service_fake
+    create_product_by_document_service_fake,
+    get_all_products_with_analysis_service
 )
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -178,4 +179,17 @@ async def extract_text_from_document(
         document=document,
         session=session,
     )
+
+
+@router.get("/with_analysis", response_model=ProductsList)
+async def get_all_products_with_analysis(
+    session: T_Session,
+    filter: Annotated[FilterPage, Query()],
+    current_user: T_CurrentUser
+):
+    return {"products": await get_all_products_with_analysis_service(
+        session,
+        filter,
+        current_user
+        )}
 

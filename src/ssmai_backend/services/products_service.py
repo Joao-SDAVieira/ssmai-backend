@@ -8,7 +8,7 @@ from sqlalchemy import and_, insert, select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.models.document import Document
-from ssmai_backend.models.produto import Estoque, Produto
+from ssmai_backend.models.produto import Estoque, Produto, Previsoes
 from ssmai_backend.models.user import User
 from ssmai_backend.schemas.products_schemas import ProductSchema
 from ssmai_backend.schemas.root_schemas import FilterPage
@@ -937,3 +937,19 @@ async def create_product_by_document_service_fake(current_user: User,document, s
     await session.refresh(document)
 
     return document
+
+
+async def get_all_products_with_analysis_service(
+        session: AsyncSession,
+        filter: FilterPage,
+        current_user: User
+):
+    
+    stmt_join = (
+    select(Produto)
+    .join(Previsoes, Produto.id == Previsoes.id_produtos)
+    .where(Produto.id_empresas == current_user.id_empresas)
+    .distinct().limit(filter.limit).offset(filter.offset)
+    )
+    products_db = await session.scalars(stmt_join)
+    return products_db.all()
