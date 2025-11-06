@@ -857,7 +857,6 @@ async def generate_product_info_from_docs_pre_extracted_service(
     }
 
     document_db.ai_result = str(informations_values)
-    breakpoint()
     await session.commit()
 
     return informations_values
