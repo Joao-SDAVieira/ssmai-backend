@@ -925,7 +925,6 @@ async def delete_all_products_by_enterpryse_id_service(
     return {'message': 'deleted!'}
 
 
-
 async def create_product_by_document_service_fake(current_user: User,document, session: AsyncSession):
     document =  Document(extracted=False,
              document_path=f'https://fake.s3.fake.amazonaws.com/fake.com')
@@ -953,3 +952,44 @@ async def get_all_products_with_analysis_service(
     )
     products_db = await session.scalars(stmt_join)
     return products_db.all()
+
+
+async def update_product_image_service(
+    image: UploadFile,
+    session: AsyncSession,
+    current_user: User,
+    s3_client,
+    product_id):
+    settings = Settings()
+    if not image:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail='No image file was uploaded.',
+        )
+    ALOOWED_MIME_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
+    ext = image.filename.split('.')[-1]
+    if image.content_type not in ALOOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST, detail='Unsupported file type'
+        )
+    filename_with_ext = f'uploads/{current_user.id_empresas}/product/{product_id}/image.{ext}'
+    
+    product_db = await session.scalar(select(Produto).where(
+        and_(Produto.id_empresas == current_user.id_empresas,Produto.id == product_id)
+        ))
+    
+    if not product_db:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail='Product not found!')
+
+    await s3_client.upload_fileobj(
+        image.file,
+        settings.S3_BUCKET,
+        filename_with_ext,
+        ExtraArgs={'ContentType': 'image/jpeg'},
+    )
+
+    
+    product_db.image = f'https://{settings.S3_BUCKET}.s3.{settings.REGION}.amazonaws.com/{filename_with_ext}'
+    await session.commit()
+
+    return product_db

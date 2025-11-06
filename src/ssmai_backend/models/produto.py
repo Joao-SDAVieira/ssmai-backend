@@ -19,6 +19,7 @@ class Produto:
     )
     nome: Mapped[str]
     categoria: Mapped[str]
+    image: Mapped[str] = mapped_column(nullable=True, default=None, init=False)
     created_at: Mapped[datetime] = mapped_column(
         init=False, server_default=func.now()
     )

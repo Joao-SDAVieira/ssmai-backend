@@ -31,7 +31,8 @@ from ssmai_backend.services.products_service import (
     update_product_by_id_service,
     delete_all_products_by_enterpryse_id_service,
     create_product_by_document_service_fake,
-    get_all_products_with_analysis_service
+    get_all_products_with_analysis_service,
+    update_product_image_service
 )
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -193,3 +194,21 @@ async def get_all_products_with_analysis(
         current_user
         )}
 
+
+@router.put('/{product_id}/image',
+             status_code=HTTPStatus.CREATED,
+             response_model=PublicProductSchema)
+async def update_product_image(
+    image: UploadFile,
+    session: T_Session,
+    current_user: T_CurrentUser,
+    product_id: int,
+    s3_client=Depends(get_s3_client),
+):
+    return await update_product_image_service(
+        image=image,
+        session=session,
+        s3_client=s3_client,
+        current_user=current_user,
+        product_id=product_id
+    )
