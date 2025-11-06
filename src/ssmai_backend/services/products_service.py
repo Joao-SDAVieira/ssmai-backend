@@ -746,10 +746,9 @@ async def create_product_by_document_service(
     IMAGE_MIME_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
     ext = document.filename.split('.')[-1]
 
-    EMPRESA_DEFAULT_ID = 1  # TODO: Ajustar
 
     filename_with_ext = (
-        f'uploads/{EMPRESA_DEFAULT_ID}/documents_to_extract/{uuid4()}.{ext}'
+        f'uploads/{current_user.id_empresas}/documents_to_extract/{uuid4()}.{ext}'
     )
 
     if document.content_type in IMAGE_MIME_TYPES:
