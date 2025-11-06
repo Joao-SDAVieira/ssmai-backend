@@ -739,7 +739,8 @@ async def create_product_by_document_service(
     document: UploadFile,
     session: AsyncSession,
     s3_client,
-    textract_client
+    textract_client,
+    current_user: User
 ):
     SETTINGS = Settings()
     IMAGE_MIME_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
@@ -759,7 +760,7 @@ async def create_product_by_document_service(
             ExtraArgs={'ContentType': 'image/jpeg'},
         )
 
-    document_db = Document(extracted=False,
+    document_db = Document(extracted=False, id_empresas= current_user.id_empresas,
              document_path=f'https://{SETTINGS.S3_BUCKET}.s3.{SETTINGS.REGION}.amazonaws.com/{filename_with_ext}')
     session.add(document_db)
     await session.commit()
@@ -928,7 +929,7 @@ async def delete_all_products_by_enterpryse_id_service(
 async def create_product_by_document_service_fake(current_user: User,document, session: AsyncSession):
     document =  Document(extracted=False,
              document_path=f'https://fake.s3.fake.amazonaws.com/fake.com')
-    document.extract_result = get_text_extracted()
+    document.extract_result = 'get_text_extracted()'
     document.extracted = True
     document.id_empresas = current_user.id_empresas
     session.add(document)

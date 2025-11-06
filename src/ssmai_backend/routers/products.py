@@ -113,14 +113,16 @@ async def update_product_by_id(
 async def extract_text_from_document(
     document: UploadFile,
     session: T_Session,
+    current_user: T_CurrentUser,
     s3_client=Depends(get_s3_client),
-    textract_client=Depends(get_textract_client)
+    textract_client=Depends(get_textract_client),
 ):
     return await create_product_by_document_service(
+        current_user=current_user,
         document=document,
         session=session,
         s3_client=s3_client,
-        textract_client=textract_client
+        textract_client=textract_client,
     )
 
 
