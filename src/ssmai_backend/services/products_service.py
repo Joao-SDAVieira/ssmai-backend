@@ -1057,7 +1057,6 @@ async def update_product_image_service(
             status_code=HTTPStatus.BAD_REQUEST,
             detail='No image file was uploaded.',
         )
-    breakpoint()
     ALOOWED_MIME_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
     ext = image.filename.split('.')[-1].lower()
     if image.content_type not in ALOOWED_MIME_TYPES:
@@ -1083,5 +1082,4 @@ async def update_product_image_service(
     product_db.image = f'https://{settings.S3_BUCKET}.s3.{settings.REGION}.amazonaws.com/{filename_with_ext}'
     await session.commit()
     await session.refresh(product_db)
-    breakpoint()
     return product_db
