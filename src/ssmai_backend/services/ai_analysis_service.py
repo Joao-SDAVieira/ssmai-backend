@@ -1,19 +1,34 @@
-import io
-from scipy.stats import norm
+from http import HTTPStatus
+
 import numpy as np
-
-from ssmai_backend.models.user import User
-from ssmai_backend.models.produto import MovimentacoesEstoque, Produto, Estoque, Previsoes
-from ssmai_backend.settings import Settings
-
-from sqlalchemy import func, select, case, delete, insert, ScalarResult, and_
-from sqlalchemy.ext.asyncio import AsyncSession
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
+from fastapi import HTTPException
 from prophet import Prophet
+from scipy.stats import norm
+from sklearn.preprocessing import LabelEncoder
+from sqlalchemy import (
+    Integer,
+    ScalarResult,
+    and_,
+    case,
+    delete,
+    func,
+    insert,
+    select,
+)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.expression import cast
+
+from ssmai_backend.models.produto import (
+    Estoque,
+    MovimentacoesEstoque,
+    Previsoes,
+    Produto,
+)
+from ssmai_backend.models.user import User
 
 
-async def generate_dataset_moviments(session, id_produtos: int=None):
+async def generate_dataset_moviments(session, id_produtos: int = None):
     subquery_stmt = (
         select(
             MovimentacoesEstoque.id_produtos.label("id_produto"),
@@ -50,10 +65,14 @@ async def generate_dataset_moviments(session, id_produtos: int=None):
     )
 
     dataset = await session.execute(query)
-    return dataset.all()
+    moviments = dataset.all()
+    if len(moviments) == 0:
+        raise HTTPException(status_code=HTTPStatus.CONFLICT,
+                            detail='Product without moviments')
+    return moviments
 
 
-async def generate_moviments_df(session, id_produtos: int=None):
+async def generate_moviments_df(session, id_produtos: int = None):
     dataset = await generate_dataset_moviments(session, id_produtos)
     df = pd.DataFrame(dataset, columns=[
         "id_produto",
@@ -74,7 +93,7 @@ async def generate_moviments_df(session, id_produtos: int=None):
     df["saldo_dia"] = df.groupby("id_produto")["quantidade_saida"].cumsum()
     le = LabelEncoder()
     df["categoria_encoded"] = le.fit_transform(df["categoria"])
-    
+
     df.drop(columns=['categoria'])
 
     return df
@@ -103,6 +122,18 @@ async def create_forecast(df_to_prophet: pd.DataFrame, ai_model: Prophet) -> pd.
     return df_forecast
 
 
+async def calculate_ideal_stock_by_df_forecast(df_forecast: pd.DataFrame):
+    future_stock = df_forecast.tail(15)['saida_prevista']
+    standart_deviation = future_stock.std()
+    lead_time = 7
+    diary_average = future_stock.mean()
+    service_level = 0.95,
+    score = norm.ppf(service_level)
+    demanda_leadtime = diary_average * lead_time
+    safety_stock = score * standart_deviation * np.sqrt(lead_time)
+    return demanda_leadtime + safety_stock
+
+
 async def add_forecast_on_db_by_product_id(product_id: int,
                                            df_forecast: pd.DataFrame,
                                            session: AsyncSession):
@@ -110,16 +141,19 @@ async def add_forecast_on_db_by_product_id(product_id: int,
 
     await session.execute(statement)
     df_forecast = df_forecast[['ds', 'yhat']].rename(
-        columns={'ds': 'data', 'yhat': 'estoque_previsto'}
+        columns={'ds': 'data', 'yhat': 'saida_prevista'}
         )
     df_forecast['id_produtos'] = product_id
     forecast_dict = df_forecast.to_dict(orient="records")
     await session.execute(insert(Previsoes), forecast_dict)
+    stock_db = await session.scalar(select(Estoque).where(Estoque.id_produtos == product_id))
+    estoque_ideal = await calculate_ideal_stock_by_df_forecast(df_forecast)
+    stock_db.estoque_ideal = float(estoque_ideal.item())
 
 
 async def create_df_by_object_model_list(obj_list: list[ScalarResult]):
-    data = [ 
-    {key: value for key, value in obj.__dict__.items() if not key.startswith('_')} 
+    data = [
+    {key: value for key, value in obj.__dict__.items() if not key.startswith('_')}
     for obj in obj_list
     ]
     return pd.DataFrame(data)
@@ -153,16 +187,20 @@ async def update_ai_predictions_to_enterpryse_service(
 async def get_analysis_by_product_id_service(
     product_id: int,
     session: AsyncSession,
-    service_level: float=0.95,
+    service_level: float = 0.95,
     lead_time=2
 ):
     forecasts_db = await session.scalars(select(Previsoes).where(Previsoes.id_produtos == product_id))
+    forecasts_all = forecasts_db.all()
+    if not forecasts_all:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND,
+                            detail='Forecast not found to this product')
 
-    df_forecast = await create_df_by_object_model_list(forecasts_db.all())
+    df_forecast = await create_df_by_object_model_list(forecasts_all)
 
     stock_db = await session.scalar(select(Estoque).where(Estoque.id_produtos == product_id))
 
-    future_stock = df_forecast.tail(15)['estoque_previsto']
+    future_stock = df_forecast.tail(15)['saida_prevista']
 
     score = norm.ppf(service_level)
 
@@ -175,9 +213,9 @@ async def get_analysis_by_product_id_service(
     faltante = ideal_stock - stock_db.quantidade_disponivel
     return {
         "diary_average": diary_average,
-        "demanda_leadtime": demanda_leadtime, #saida até reposição
-        "safety_stock": safety_stock, # estoque de sgurança, incrementa o stock ideal
-        "estoque_ideal": ideal_stock, # estoque ideal
+        "demanda_leadtime": demanda_leadtime,  # saida até reposição
+        "safety_stock": safety_stock,  # estoque de sgurança, incrementa o stock ideal
+        "estoque_ideal": ideal_stock,  # estoque ideal
         "pedir": faltante if faltante > 0 else 0
     }
 
@@ -186,44 +224,140 @@ async def get_graph_data_by_product_id_service(
     product_id: int,
     session: AsyncSession,
 ):
-    movimento_case = case(
-    (MovimentacoesEstoque.tipo == "entrada", MovimentacoesEstoque.quantidade),
-    else_=-MovimentacoesEstoque.quantidade
-    )
-
-    saldo_cumulativo = func.sum(movimento_case).over(
-        order_by=MovimentacoesEstoque.date
-    )
 
     stmt_hist = (
         select(
-            MovimentacoesEstoque.date.label("data"),
-            saldo_cumulativo.label("estoque")
+            func.date(MovimentacoesEstoque.date).label("data"),
+            func.sum(
+                case((MovimentacoesEstoque.tipo == "saida", MovimentacoesEstoque.quantidade), else_=0)
+            ).label("saida_dia")
         )
         .where(MovimentacoesEstoque.id_produtos == product_id)
-        .order_by(MovimentacoesEstoque.date.asc())
+        .group_by(func.date(MovimentacoesEstoque.date))
+        .order_by(func.date(MovimentacoesEstoque.date).asc())
     )
 
     result_hist = await session.execute(stmt_hist)
-    historico = [{"data": r.data, "estoque": r.estoque} for r in result_hist]
+    historico = [{"data": r.data, "estoque": r.saida_dia} for r in result_hist]
+    if len(historico) == 0:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Without moviments to this product')
 
     ultima_data = historico[-1]["data"] if historico else None
+
     stmt_prev = (
         select(
             Previsoes.data,
-            Previsoes.estoque_previsto
+            Previsoes.saida_prevista
         )
         .where(
             and_(
                 Previsoes.id_produtos == product_id,
                 Previsoes.data > ultima_data
             )
-            )
+        )
         .order_by(Previsoes.data.asc())
     )
     result_prev = await session.execute(stmt_prev)
-    previsoes = [{"data": r.data, "estoque_previsto": int(r.estoque_previsto)} for r in result_prev]
+
+    previsoes = [{"data": r.data, "saida_prevista": int(r.saida_prevista)} for r in result_prev]
     return {
         "historico": historico,
         "previsoes": previsoes
     }
+
+
+async def get_worst_stock_deviation_service(session: AsyncSession, current_user: User):
+
+    difference_percent_schema = case(
+        (Estoque.estoque_ideal == 0, None),
+        else_=(
+            (Estoque.quantidade_disponivel - Estoque.estoque_ideal) / Estoque.estoque_ideal
+        ) * 100.0
+    ).label("difference_percent")
+
+    abs_difference_percent = case(
+        (
+            (Estoque.estoque_ideal == 0) & (Estoque.quantidade_disponivel > 0),
+            9999999.0
+        ),
+        (
+            (Estoque.estoque_ideal == 0) & (Estoque.quantidade_disponivel <= 0),
+            0.0
+        ),
+        else_=func.abs(
+            (Estoque.quantidade_disponivel - Estoque.estoque_ideal) / Estoque.estoque_ideal
+        ) * 100.0
+    ).label("abs_difference_percent")
+
+    difference_quantity = cast(
+        (Estoque.quantidade_disponivel - Estoque.estoque_ideal), Integer
+    ).label("difference_quantity")
+    bigger_than_expected = case(
+        ((Estoque.quantidade_disponivel - Estoque.estoque_ideal) > 0, True),
+        else_=False
+    ).label("bigger_than_expected")
+
+    cash_loss = ((Estoque.quantidade_disponivel - Estoque.estoque_ideal) * Estoque.custo_medio).label("cash_loss")
+
+    stmt = (
+        select(
+            Estoque.id,
+            Estoque.id_produtos,
+            Estoque.quantidade_disponivel,
+            Estoque.custo_medio,
+            Estoque.estoque_ideal,
+            Estoque.created_at,
+            Estoque.updated_at,
+
+            difference_percent_schema,
+            difference_quantity,
+            bigger_than_expected,
+            cash_loss,
+            abs_difference_percent
+        )
+        .join(Produto, Estoque.id_produtos == Produto.id)
+        .where(
+            and_(
+                Estoque.estoque_ideal.isnot(None),
+                Produto.id_empresas == current_user.id_empresas
+            )
+        )
+        .order_by(
+            abs_difference_percent.desc()
+        )
+        .limit(10)
+    )
+
+    result = await session.execute(stmt)
+
+    df = pd.DataFrame(result.all())
+
+    if df.empty:
+        return []
+
+    df['difference_percent'] = df['difference_percent'].fillna(0.0)
+
+    df = df.drop(columns=['abs_difference_percent'], errors='ignore')
+    stock_cols = [
+        "id", "id_produtos", "quantidade_disponivel", "custo_medio",
+        "estoque_ideal", "created_at", "updated_at"
+    ]
+
+    indicator_cols = [
+        "difference_percent", "difference_quantity",
+        "bigger_than_expected", "cash_loss"
+    ]
+
+    response_data = []
+
+    for _, row in df.iterrows():
+        stock_data = row[stock_cols].to_dict()
+        indicator_data = row[indicator_cols].to_dict()
+
+        response_data.append({
+            "indicators": indicator_data,
+            "stock": stock_data
+        })
+
+    return response_data
+    return df.to_dict(orient="records")

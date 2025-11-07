@@ -6,9 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ssmai_backend.database import get_session
 from ssmai_backend.schemas.enterpryse_schemas import (
+    EnterpryseGet,
     EnterpryseResponseModel,
     EnterpryseSchema,
-    EnterpryseGet
 )
 from ssmai_backend.schemas.root_schemas import Message
 from ssmai_backend.services.enterprise_services import (

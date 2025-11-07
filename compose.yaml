@@ -1,6 +1,6 @@
 services:
   stock_application_database:
-    image: postgres:15-alpine
+    image: postgres:16
     container_name: db
     volumes:
       - pgdata:/var/lib/postgresql/data

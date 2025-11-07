@@ -25,7 +25,7 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('id_produtos', sa.Integer(), nullable=False),
     sa.Column('data', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
-    sa.Column('estoque_previsto', sa.Float(), nullable=False),
+    sa.Column('saida_prevista', sa.Float(), nullable=False),
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.Column('updated_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
     sa.ForeignKeyConstraint(['id_produtos'], ['produtos.id'], ondelete='CASCADE'),

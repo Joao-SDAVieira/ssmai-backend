@@ -26,6 +26,7 @@ async def get_stock_by_product_id(
     current_user: User
 ):
     product = await session.scalar(select(Produto).where(Produto.id == product_id))
+
     if not product or (product.id_empresas != current_user.id_empresas):
         raise HTTPException(
             HTTPStatus.NOT_FOUND,
@@ -244,16 +245,15 @@ async def insert_moviments_with_csv_service(
             status_code=HTTPStatus.BAD_REQUEST,
             detail=f"CSV deve conter as colunas: {', '.join(required_columns)}"
         )
-
     try:
         for _, row in df_moviments.iterrows():
             tipo = row["tipo"]
             product_id = row["id_produtos"]
-            if tipo == "Entrada":
+            if tipo in ("Entrada", "entrada"):
                 moviment = MovimentModelResponse(
                     id=row["id"],
                     id_produtos=row['id_produtos'],
-                    tipo=row['tipo'],
+                    tipo='Entrada',
                     quantidade=row["quantidade"],
                     preco_und=row["preco_und"],
                     total=row['total'],
@@ -261,11 +261,11 @@ async def insert_moviments_with_csv_service(
                     updated_at=row['updated_at']
                 )
                 await register_entry_by_id_service(product_id, session, moviment, current_user, batch=True)
-            elif tipo == "Saida":
+            elif tipo in ("Saida", 'saida'):
                 moviment = MovimentModelResponse(
                     id=row["id"],
                     id_produtos=row['id_produtos'],
-                    tipo=row['tipo'],
+                    tipo='Saida',
                     quantidade=row["quantidade"],
                     preco_und=row["preco_und"],
                     total=row['total'],
@@ -273,9 +273,16 @@ async def insert_moviments_with_csv_service(
                     updated_at=row['updated_at']
                 )
                 await register_exit_by_id_service(product_id, session, moviment, current_user, batch=True)
+            else:
+                print(row["id"], row['id_produtos'])
+                raise HTTPException(status_code=HTTPStatus.CONFLICT, detail='Saida, Entrada ou Outro')
         await session.commit()
+        print('alow')
     except Exception as e:
         await session.rollback()
-        raise e
+        print(type(e))
+        print(e)
+        print('aloo')
+        raise HTTPException(status_code=500, detail='Fail')
 
     return {'message': 'success'}

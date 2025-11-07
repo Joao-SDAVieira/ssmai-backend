@@ -22,15 +22,17 @@ from ssmai_backend.schemas.products_schemas import (
 from ssmai_backend.schemas.root_schemas import FilterPage, Message
 from ssmai_backend.services.products_service import (
     create_product_by_document_service,
+    create_product_by_document_service_fake,
     create_product_service,
+    delete_all_products_by_enterpryse_id_service,
     delete_product_by_id_service,
     generate_product_info_from_docs_pre_extracted_service,
+    get_all_products_with_analysis_service,
     insert_products_with_csv_service,
     read_all_products_by_user_enterpryse_service,
     read_all_products_service,
     update_product_by_id_service,
-    delete_all_products_by_enterpryse_id_service,
-    create_product_by_document_service_fake
+    update_product_image_service,
 )
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -113,14 +115,16 @@ async def update_product_by_id(
 async def extract_text_from_document(
     document: UploadFile,
     session: T_Session,
+    current_user: T_CurrentUser,
     s3_client=Depends(get_s3_client),
-    textract_client=Depends(get_textract_client)
+    textract_client=Depends(get_textract_client),
 ):
     return await create_product_by_document_service(
+        current_user=current_user,
         document=document,
         session=session,
         s3_client=s3_client,
-        textract_client=textract_client
+        textract_client=textract_client,
     )
 
 
@@ -162,7 +166,6 @@ async def delete_all_products_by_enterpryse_id(
     )
 
 
-
 @router.post('/extract_text_from_document/fake',
              status_code=HTTPStatus.CREATED,
              response_model=ExtractResultSchema)
@@ -177,3 +180,34 @@ async def extract_text_from_document(
         session=session,
     )
 
+
+@router.get("/with_analysis", response_model=ProductsList)
+async def get_all_products_with_analysis(
+    session: T_Session,
+    filter: Annotated[FilterPage, Query()],
+    current_user: T_CurrentUser
+):
+    return {"products": await get_all_products_with_analysis_service(
+        session,
+        filter,
+        current_user
+        )}
+
+
+@router.put('/{product_id}/image',
+             status_code=HTTPStatus.CREATED,
+             response_model=PublicProductSchema)
+async def update_product_image(
+    image: UploadFile,
+    session: T_Session,
+    current_user: T_CurrentUser,
+    product_id: int,
+    s3_client=Depends(get_s3_client),
+):
+    return await update_product_image_service(
+        image=image,
+        session=session,
+        s3_client=s3_client,
+        current_user=current_user,
+        product_id=product_id
+    )

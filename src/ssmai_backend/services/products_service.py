@@ -1,577 +1,580 @@
 from http import HTTPStatus
 from json import dumps, loads
 from uuid import uuid4
+from io import BytesIO
+import xml.etree.ElementTree as ET
 
 import pandas as pd
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import and_, insert, select, delete
+from sqlalchemy import and_, delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from PyPDF2 import PdfReader
 
 from ssmai_backend.models.document import Document
-from ssmai_backend.models.produto import Estoque, Produto
+from ssmai_backend.models.produto import Estoque, Previsoes, Produto
 from ssmai_backend.models.user import User
 from ssmai_backend.schemas.products_schemas import ProductSchema
 from ssmai_backend.schemas.root_schemas import FilterPage
 from ssmai_backend.settings import Settings
 
-def get_text_extracted():
-    return """
-            NF-C
-        RECEBEMOS DE GROWTH SUPPLEMENTS PRODUTOS ALIMES neios TDA os PRODUTOS CONSTANTES DA NOTA FISCAL INDIC ADA AO LADO
-        N. 014041259
-        DATA DE RECEBIMENTO
-        SÉRIE 17
-        IDENTIFICAÇÃO ASSINA TURA DO RECEREDOR
-        N2
-        Identificação do emitente
-        DANFE
-        Growth
-        GROWTH SUPPL EMENTS PRO
-        DOCUMEN MIXILIAR DA
-        DUTOS ALIMENTIC LTDA
-        NOTA ELETRÓNICA
-        CHAVE DE ACESSO DA NF-E
-        AVENIDA WILSON LEMOS, Date
-        0-ENTILADA
-        4225 1010 8326 4400 0108 5501 7014 0412 5914 6788 6817
-        Complements: GALPADIS
-        USAIDA
-        SANTA LUZIA
-        N. 014041259
-        TUUCASSO
-        Consulta de autenticidade no portal nacional da NF-e
-        SUPPLEMENTS
-        SERIE 17
-        Fone: 1063394
-        fazenda gov br/portal ou no site da SEFAZ Autorizada
-        FOLHA 01/01
-        NATUREZA D.A. OPERAÇÃO
-        PROTOCOLO DE AUTORIZAÇÃO DE USO
-        VENDA DE PRODUTOS
-        242250391243919 06/10/2025
-        INSCRIÇÃO ESTADUAL
-        INSC.ESTADUAL DO SUBST TRIM.
-        CNPJ/CPF
-        253860009
-        824016127112
-        10.832.644/0001-08
-        DESTINATARIO/REMETENTE
-        NOME/RAZÃO SOCIAL
-        CARRIER
-        DATA DE EMISSÃO
-        ЮЛО VICTOR DE OLIVEIRA VIEIRA
-        535 467 668-14
-        06/10/2025
-        ENDEREÇO
-        BAIRRO/DISTRITO
-        DATA ENTRADA/SAIDA
-        CEP
-        RUA MARIA JOSE DA CONCEICAO, 95, COLEGIO MARIA ANTONIA DE
-        06/10/2025
-        VILA ANDRADE
-        05730-170
-        MUNICIPIO
-        HORA ENTRADA/SAIDA
-        FONE/FAX
-        LF
-        INSCRIÇÃO ESTADUAL
-        SAO PAULO
-        15:22:00
-        .........
-        SP
-        FATURA
-        CALCULO DO IMPOSTO
-        BASE DE CALCULO DO ICMS
-        VALOR DO ICMS
-        VALOR DO ICMS SUBSTITUIÇÃO
-        VALOR TOTAL DOS PRODUTOS
-        BASE DE CALCULO DO ICMS SUBSTITUIÇÃO
-        266,51
-        31,98
-        0,00
-        0,00
-        308,54
-        VALOR DO FRETE
-        VALOR TOTAL DA NOTA
-        VALOR DO SEGURO
-        DESCONTO
-        OUTRAS DESPESAS ACESSÓRIAS
-        VALOR DO IPI
-        0,00
-        0,00
-        266,51
-        0,00
-        42.03
-        0,00
-        TRANSPORTADOR/VOLUMES TRANSPORTADOS
-        RAZÃO SOCIAL
-        CÓDIGO ANTI
-        PLACA DO VEICULO
-        UF
-        CNPJ/CPF
-        FRETE FOR CONTA
-        40 675 366/0002-66
-        RI SERVICOS DE ENTREGA E LOGISTICA LTDA
-        I-DESTINATARIO
-        ENDEREÇO
-        MUNICIPIO
-        UF
-        INSCRIÇÃO ESTADUAL
-        AV PRESIDENTE WILSON
-        SAO PAULO
-        SP
-        131542250119
-        QUANTIDADE
-        ESPECIE
-        MARCA
-        NUMERAÇÃO
-        PESO BRUTO
-        PESO LIQUIDO
-        VOLUME
-        3,000
-        3,000
-        DADOS DO PRODU
-        COD. PROD
-        DESCRIÇÃO DO PROD/SERV.
-        CFOP
-        QUANT
-        V.UNITARIO
-        V.TOTAL
-        BC.ICMS
-        V.ICMS
-        V.IPI
-        A.ICMS
-        A.IPI
-        NCM/SH
-        CST
-        UN
-        10003
-        WHEY PROTEIN CONCENTRADO 80% IKG CHOCOLATE
-        21061000
-        500
-        6107
-        UN
-        2,0000
-        138,770000
-        277,54
-        239,73
-        28,77
-        0,00
-        12.00%
-        0.00%
-        10004
-        PASTA AMENDOIM IKG
-        20081100
-        000
-        6107
-        UN
-        1,0000
-        31,000000
-        31,00
-        26,78
-        3,21
-        0,00
-        12.00%
-        0.00%
-        LCULO DO ISSON
-        SCRIÇÃO MUNICIPAL
-        VALOR TOTAL DOS SERVIÇOS
-        BASE DE CÁLCULO DO ISSQN
-        VALOR DO ISSQN
-        os ADICIONAIS
-        RMAÇÕES COMPLEMENTARES
-        RESERV ADO AO FISCO
-        colo 242250391243919
-        do ICMS relativo ao Fundo de Combate a Pobreza FCP da UF de destino RS
-        or do ICMS Interestadual para a UF de destino: RS 15.99 Valor do ICMS
-        NF-C
-        RECEBEMOS
-        DE
-        GROWTH
-        SUPPLEMENTS
-        PRODUTOS
-        ALIMES
-        neios
-        TDA
-        os
-        PRODUTOS
-        CONSTANTES
-        DA
-        NOTA
-        FISCAL
-        INDIC
-        ADA
-        AO LADO
-        N.
-        014041259
-        DATA
-        DE
-        RECEBIMENTO
-        SÉRIE
-        17
-        IDENTIFICAÇÃO
-        ASSINA
-        TURA
-        DO
-        RECEREDOR
-        N2
-        Identificação
-        do
-        emitente
-        DANFE
-        Growth
-        GROWTH
-        SUPPL
-        EMENTS
-        PRO
-        DOCUMEN
-        MIXILIAR
-        DA
-        DUTOS
-        ALIMENTIC
-        LTDA
-        NOTA
-        ELETRÓNICA
-        CHAVE
-        DE
-        ACESSO
-        DA
-        NF-E
-        AVENIDA
-        WILSON
-        LEMOS,
-        Date
-        0-ENTILADA
-        4225
-        1010
-        8326
-        4400
-        0108
-        5501
-        7014
-        0412
-        5914
-        6788
-        6817
-        Complements:
-        GALPADIS
-        USAIDA
-        SANTA
-        LUZIA
-        N.
-        014041259
-        TUUCASSO
-        Consulta
-        de
-        autenticidade
-        no
-        portal
-        nacional
-        da
-        NF-e
-        SUPPLEMENTS
-        SERIE
-        17
-        Fone:
-        1063394
-        fazenda
-        gov
-        br/portal
-        ou
-        no
-        site
-        da
-        SEFAZ
-        Autorizada
-        FOLHA
-        01/01
-        NATUREZA
-        D.A.
-        OPERAÇÃO
-        PROTOCOLO
-        DE
-        AUTORIZAÇÃO
-        DE
-        USO
-        VENDA
-        DE
-        PRODUTOS
-        242250391243919
-        06/10/2025
-        INSCRIÇÃO
-        ESTADUAL
-        INSC.ESTADUAL
-        DO
-        SUBST
-        TRIM.
-        CNPJ/CPF
-        253860009
-        824016127112
-        10.832.644/0001-08
-        DESTINATARIO/REMETENTE
-        NOME/RAZÃO
-        SOCIAL
-        CARRIER
-        DATA
-        DE
-        EMISSÃO
-        ЮЛО
-        VICTOR
-        DE
-        OLIVEIRA
-        VIEIRA
-        535 467 668-14
-        06/10/2025
-        ENDEREÇO
-        BAIRRO/DISTRITO
-        DATA
-        ENTRADA/SAIDA
-        CEP
-        RUA
-        MARIA
-        JOSE
-        DA
-        CONCEICAO,
-        95,
-        COLEGIO
-        MARIA
-        ANTONIA
-        DE
-        06/10/2025
-        VILA
-        ANDRADE
-        05730-170
-        MUNICIPIO
-        HORA
-        ENTRADA/SAIDA
-        FONE/FAX
-        LF
-        INSCRIÇÃO
-        ESTADUAL
-        SAO
-        PAULO
-        15:22:00
-        .........
-        SP
-        FATURA
-        CALCULO
-        DO
-        IMPOSTO
-        BASE
-        DE
-        CALCULO
-        DO
-        ICMS
-        VALOR
-        DO
-        ICMS
-        VALOR
-        DO
-        ICMS
-        SUBSTITUIÇÃO
-        VALOR
-        TOTAL
-        DOS
-        PRODUTOS
-        BASE
-        DE
-        CALCULO
-        DO
-        ICMS
-        SUBSTITUIÇÃO
-        266,51
-        31,98
-        0,00
-        0,00
-        308,54
-        VALOR
-        DO
-        FRETE
-        VALOR
-        TOTAL
-        DA
-        NOTA
-        VALOR
-        DO
-        SEGURO
-        DESCONTO
-        OUTRAS
-        DESPESAS
-        ACESSÓRIAS
-        VALOR
-        DO
-        IPI
-        0,00
-        0,00
-        266,51
-        0,00
-        42.03
-        0,00
-        TRANSPORTADOR/VOLUMES
-        TRANSPORTADOS
-        RAZÃO
-        SOCIAL
-        CÓDIGO
-        ANTI
-        PLACA
-        DO
-        VEICULO
-        UF
-        CNPJ/CPF
-        FRETE
-        FOR
-        CONTA
-        40
-        675
-        366/0002-66
-        RI
-        SERVICOS
-        DE
-        ENTREGA
-        E
-        LOGISTICA
-        LTDA
-        I-DESTINATARIO
-        ENDEREÇO
-        MUNICIPIO
-        UF
-        INSCRIÇÃO
-        ESTADUAL
-        AV
-        PRESIDENTE
-        WILSON
-        SAO
-        PAULO
-        SP
-        131542250119
-        QUANTIDADE
-        ESPECIE
-        MARCA
-        NUMERAÇÃO
-        PESO
-        BRUTO
-        PESO
-        LIQUIDO
-        VOLUME
-        3,000
-        3,000
-        DADOS
-        DO
-        PRODU
-        COD.
-        PROD
-        DESCRIÇÃO
-        DO
-        PROD/SERV.
-        CFOP
-        QUANT
-        V.UNITARIO
-        V.TOTAL
-        BC.ICMS
-        V.ICMS
-        V.IPI
-        A.ICMS
-        A.IPI
-        NCM/SH
-        CST
-        UN
-        10003
-        WHEY
-        PROTEIN
-        CONCENTRADO
-        80%
-        IKG
-        CHOCOLATE
-        21061000
-        500
-        6107
-        UN
-        2,0000
-        138,770000
-        277,54
-        239,73
-        28,77
-        0,00
-        12.00%
-        0.00%
-        10004
-        PASTA
-        AMENDOIM
-        IKG
-        20081100
-        000
-        6107
-        UN
-        1,0000
-        31,000000
-        31,00
-        26,78
-        3,21
-        0,00
-        12.00%
-        0.00%
-        LCULO
-        DO
-        ISSON
-        SCRIÇÃO
-        MUNICIPAL
-        VALOR
-        TOTAL
-        DOS
-        SERVIÇOS
-        BASE
-        DE
-        CÁLCULO
-        DO
-        ISSQN
-        VALOR
-        DO
-        ISSQN
-        os
-        ADICIONAIS
-        RMAÇÕES
-        COMPLEMENTARES
-        RESERV
-        ADO
-        AO
-        FISCO
-        colo
-        242250391243919
-        do
-        ICMS
-        relativo
-        ao
-        Fundo
-        de
-        Combate
-        a
-        Pobreza
-        FCP
-        da
-        UF
-        de
-        destino
-        RS
-        or
-        do
-        ICMS
-        Interestadual
-        para
-        a
-        UF
-        de
-        destino:
-        RS
-        15.99
-        Valor
-        do
-        ICMS
-    """
+# def get_text_extracted():
+#     return """
+#             NF-C
+#         RECEBEMOS DE GROWTH SUPPLEMENTS PRODUTOS ALIMES neios TDA os PRODUTOS CONSTANTES DA NOTA FISCAL INDIC ADA AO LADO
+#         N. 014041259
+#         DATA DE RECEBIMENTO
+#         SÉRIE 17
+#         IDENTIFICAÇÃO ASSINA TURA DO RECEREDOR
+#         N2
+#         Identificação do emitente
+#         DANFE
+#         Growth
+#         GROWTH SUPPL EMENTS PRO
+#         DOCUMEN MIXILIAR DA
+#         DUTOS ALIMENTIC LTDA
+#         NOTA ELETRÓNICA
+#         CHAVE DE ACESSO DA NF-E
+#         AVENIDA WILSON LEMOS, Date
+#         0-ENTILADA
+#         4225 1010 8326 4400 0108 5501 7014 0412 5914 6788 6817
+#         Complements: GALPADIS
+#         USAIDA
+#         SANTA LUZIA
+#         N. 014041259
+#         TUUCASSO
+#         Consulta de autenticidade no portal nacional da NF-e
+#         SUPPLEMENTS
+#         SERIE 17
+#         Fone: 1063394
+#         fazenda gov br/portal ou no site da SEFAZ Autorizada
+#         FOLHA 01/01
+#         NATUREZA D.A. OPERAÇÃO
+#         PROTOCOLO DE AUTORIZAÇÃO DE USO
+#         VENDA DE PRODUTOS
+#         242250391243919 06/10/2025
+#         INSCRIÇÃO ESTADUAL
+#         INSC.ESTADUAL DO SUBST TRIM.
+#         CNPJ/CPF
+#         253860009
+#         824016127112
+#         10.832.644/0001-08
+#         DESTINATARIO/REMETENTE
+#         NOME/RAZÃO SOCIAL
+#         CARRIER
+#         DATA DE EMISSÃO
+#         ЮЛО VICTOR DE OLIVEIRA VIEIRA
+#         535 467 668-14
+#         06/10/2025
+#         ENDEREÇO
+#         BAIRRO/DISTRITO
+#         DATA ENTRADA/SAIDA
+#         CEP
+#         RUA MARIA JOSE DA CONCEICAO, 95, COLEGIO MARIA ANTONIA DE
+#         06/10/2025
+#         VILA ANDRADE
+#         05730-170
+#         MUNICIPIO
+#         HORA ENTRADA/SAIDA
+#         FONE/FAX
+#         LF
+#         INSCRIÇÃO ESTADUAL
+#         SAO PAULO
+#         15:22:00
+#         .........
+#         SP
+#         FATURA
+#         CALCULO DO IMPOSTO
+#         BASE DE CALCULO DO ICMS
+#         VALOR DO ICMS
+#         VALOR DO ICMS SUBSTITUIÇÃO
+#         VALOR TOTAL DOS PRODUTOS
+#         BASE DE CALCULO DO ICMS SUBSTITUIÇÃO
+#         266,51
+#         31,98
+#         0,00
+#         0,00
+#         308,54
+#         VALOR DO FRETE
+#         VALOR TOTAL DA NOTA
+#         VALOR DO SEGURO
+#         DESCONTO
+#         OUTRAS DESPESAS ACESSÓRIAS
+#         VALOR DO IPI
+#         0,00
+#         0,00
+#         266,51
+#         0,00
+#         42.03
+#         0,00
+#         TRANSPORTADOR/VOLUMES TRANSPORTADOS
+#         RAZÃO SOCIAL
+#         CÓDIGO ANTI
+#         PLACA DO VEICULO
+#         UF
+#         CNPJ/CPF
+#         FRETE FOR CONTA
+#         40 675 366/0002-66
+#         RI SERVICOS DE ENTREGA E LOGISTICA LTDA
+#         I-DESTINATARIO
+#         ENDEREÇO
+#         MUNICIPIO
+#         UF
+#         INSCRIÇÃO ESTADUAL
+#         AV PRESIDENTE WILSON
+#         SAO PAULO
+#         SP
+#         131542250119
+#         QUANTIDADE
+#         ESPECIE
+#         MARCA
+#         NUMERAÇÃO
+#         PESO BRUTO
+#         PESO LIQUIDO
+#         VOLUME
+#         3,000
+#         3,000
+#         DADOS DO PRODU
+#         COD. PROD
+#         DESCRIÇÃO DO PROD/SERV.
+#         CFOP
+#         QUANT
+#         V.UNITARIO
+#         V.TOTAL
+#         BC.ICMS
+#         V.ICMS
+#         V.IPI
+#         A.ICMS
+#         A.IPI
+#         NCM/SH
+#         CST
+#         UN
+#         10003
+#         WHEY PROTEIN CONCENTRADO 80% IKG CHOCOLATE
+#         21061000
+#         500
+#         6107
+#         UN
+#         2,0000
+#         138,770000
+#         277,54
+#         239,73
+#         28,77
+#         0,00
+#         12.00%
+#         0.00%
+#         10004
+#         PASTA AMENDOIM IKG
+#         20081100
+#         000
+#         6107
+#         UN
+#         1,0000
+#         31,000000
+#         31,00
+#         26,78
+#         3,21
+#         0,00
+#         12.00%
+#         0.00%
+#         LCULO DO ISSON
+#         SCRIÇÃO MUNICIPAL
+#         VALOR TOTAL DOS SERVIÇOS
+#         BASE DE CÁLCULO DO ISSQN
+#         VALOR DO ISSQN
+#         os ADICIONAIS
+#         RMAÇÕES COMPLEMENTARES
+#         RESERV ADO AO FISCO
+#         colo 242250391243919
+#         do ICMS relativo ao Fundo de Combate a Pobreza FCP da UF de destino RS
+#         or do ICMS Interestadual para a UF de destino: RS 15.99 Valor do ICMS
+#         NF-C
+#         RECEBEMOS
+#         DE
+#         GROWTH
+#         SUPPLEMENTS
+#         PRODUTOS
+#         ALIMES
+#         neios
+#         TDA
+#         os
+#         PRODUTOS
+#         CONSTANTES
+#         DA
+#         NOTA
+#         FISCAL
+#         INDIC
+#         ADA
+#         AO LADO
+#         N.
+#         014041259
+#         DATA
+#         DE
+#         RECEBIMENTO
+#         SÉRIE
+#         17
+#         IDENTIFICAÇÃO
+#         ASSINA
+#         TURA
+#         DO
+#         RECEREDOR
+#         N2
+#         Identificação
+#         do
+#         emitente
+#         DANFE
+#         Growth
+#         GROWTH
+#         SUPPL
+#         EMENTS
+#         PRO
+#         DOCUMEN
+#         MIXILIAR
+#         DA
+#         DUTOS
+#         ALIMENTIC
+#         LTDA
+#         NOTA
+#         ELETRÓNICA
+#         CHAVE
+#         DE
+#         ACESSO
+#         DA
+#         NF-E
+#         AVENIDA
+#         WILSON
+#         LEMOS,
+#         Date
+#         0-ENTILADA
+#         4225
+#         1010
+#         8326
+#         4400
+#         0108
+#         5501
+#         7014
+#         0412
+#         5914
+#         6788
+#         6817
+#         Complements:
+#         GALPADIS
+#         USAIDA
+#         SANTA
+#         LUZIA
+#         N.
+#         014041259
+#         TUUCASSO
+#         Consulta
+#         de
+#         autenticidade
+#         no
+#         portal
+#         nacional
+#         da
+#         NF-e
+#         SUPPLEMENTS
+#         SERIE
+#         17
+#         Fone:
+#         1063394
+#         fazenda
+#         gov
+#         br/portal
+#         ou
+#         no
+#         site
+#         da
+#         SEFAZ
+#         Autorizada
+#         FOLHA
+#         01/01
+#         NATUREZA
+#         D.A.
+#         OPERAÇÃO
+#         PROTOCOLO
+#         DE
+#         AUTORIZAÇÃO
+#         DE
+#         USO
+#         VENDA
+#         DE
+#         PRODUTOS
+#         242250391243919
+#         06/10/2025
+#         INSCRIÇÃO
+#         ESTADUAL
+#         INSC.ESTADUAL
+#         DO
+#         SUBST
+#         TRIM.
+#         CNPJ/CPF
+#         253860009
+#         824016127112
+#         10.832.644/0001-08
+#         DESTINATARIO/REMETENTE
+#         NOME/RAZÃO
+#         SOCIAL
+#         CARRIER
+#         DATA
+#         DE
+#         EMISSÃO
+#         ЮЛО
+#         VICTOR
+#         DE
+#         OLIVEIRA
+#         VIEIRA
+#         535 467 668-14
+#         06/10/2025
+#         ENDEREÇO
+#         BAIRRO/DISTRITO
+#         DATA
+#         ENTRADA/SAIDA
+#         CEP
+#         RUA
+#         MARIA
+#         JOSE
+#         DA
+#         CONCEICAO,
+#         95,
+#         COLEGIO
+#         MARIA
+#         ANTONIA
+#         DE
+#         06/10/2025
+#         VILA
+#         ANDRADE
+#         05730-170
+#         MUNICIPIO
+#         HORA
+#         ENTRADA/SAIDA
+#         FONE/FAX
+#         LF
+#         INSCRIÇÃO
+#         ESTADUAL
+#         SAO
+#         PAULO
+#         15:22:00
+#         .........
+#         SP
+#         FATURA
+#         CALCULO
+#         DO
+#         IMPOSTO
+#         BASE
+#         DE
+#         CALCULO
+#         DO
+#         ICMS
+#         VALOR
+#         DO
+#         ICMS
+#         VALOR
+#         DO
+#         ICMS
+#         SUBSTITUIÇÃO
+#         VALOR
+#         TOTAL
+#         DOS
+#         PRODUTOS
+#         BASE
+#         DE
+#         CALCULO
+#         DO
+#         ICMS
+#         SUBSTITUIÇÃO
+#         266,51
+#         31,98
+#         0,00
+#         0,00
+#         308,54
+#         VALOR
+#         DO
+#         FRETE
+#         VALOR
+#         TOTAL
+#         DA
+#         NOTA
+#         VALOR
+#         DO
+#         SEGURO
+#         DESCONTO
+#         OUTRAS
+#         DESPESAS
+#         ACESSÓRIAS
+#         VALOR
+#         DO
+#         IPI
+#         0,00
+#         0,00
+#         266,51
+#         0,00
+#         42.03
+#         0,00
+#         TRANSPORTADOR/VOLUMES
+#         TRANSPORTADOS
+#         RAZÃO
+#         SOCIAL
+#         CÓDIGO
+#         ANTI
+#         PLACA
+#         DO
+#         VEICULO
+#         UF
+#         CNPJ/CPF
+#         FRETE
+#         FOR
+#         CONTA
+#         40
+#         675
+#         366/0002-66
+#         RI
+#         SERVICOS
+#         DE
+#         ENTREGA
+#         E
+#         LOGISTICA
+#         LTDA
+#         I-DESTINATARIO
+#         ENDEREÇO
+#         MUNICIPIO
+#         UF
+#         INSCRIÇÃO
+#         ESTADUAL
+#         AV
+#         PRESIDENTE
+#         WILSON
+#         SAO
+#         PAULO
+#         SP
+#         131542250119
+#         QUANTIDADE
+#         ESPECIE
+#         MARCA
+#         NUMERAÇÃO
+#         PESO
+#         BRUTO
+#         PESO
+#         LIQUIDO
+#         VOLUME
+#         3,000
+#         3,000
+#         DADOS
+#         DO
+#         PRODU
+#         COD.
+#         PROD
+#         DESCRIÇÃO
+#         DO
+#         PROD/SERV.
+#         CFOP
+#         QUANT
+#         V.UNITARIO
+#         V.TOTAL
+#         BC.ICMS
+#         V.ICMS
+#         V.IPI
+#         A.ICMS
+#         A.IPI
+#         NCM/SH
+#         CST
+#         UN
+#         10003
+#         WHEY
+#         PROTEIN
+#         CONCENTRADO
+#         80%
+#         IKG
+#         CHOCOLATE
+#         21061000
+#         500
+#         6107
+#         UN
+#         2,0000
+#         138,770000
+#         277,54
+#         239,73
+#         28,77
+#         0,00
+#         12.00%
+#         0.00%
+#         10004
+#         PASTA
+#         AMENDOIM
+#         IKG
+#         20081100
+#         000
+#         6107
+#         UN
+#         1,0000
+#         31,000000
+#         31,00
+#         26,78
+#         3,21
+#         0,00
+#         12.00%
+#         0.00%
+#         LCULO
+#         DO
+#         ISSON
+#         SCRIÇÃO
+#         MUNICIPAL
+#         VALOR
+#         TOTAL
+#         DOS
+#         SERVIÇOS
+#         BASE
+#         DE
+#         CÁLCULO
+#         DO
+#         ISSQN
+#         VALOR
+#         DO
+#         ISSQN
+#         os
+#         ADICIONAIS
+#         RMAÇÕES
+#         COMPLEMENTARES
+#         RESERV
+#         ADO
+#         AO
+#         FISCO
+#         colo
+#         242250391243919
+#         do
+#         ICMS
+#         relativo
+#         ao
+#         Fundo
+#         de
+#         Combate
+#         a
+#         Pobreza
+#         FCP
+#         da
+#         UF
+#         de
+#         destino
+#         RS
+#         or
+#         do
+#         ICMS
+#         Interestadual
+#         para
+#         a
+#         UF
+#         de
+#         destino:
+#         RS
+#         15.99
+#         Valor
+#         do
+#         ICMS
+#     """
 
 
 def get_bedrock_prompt(text_extracted: str):
-    text_extracted = get_text_extracted()
-    
+    # text_extracted = get_text_extracted()
+
     prompt = f"""
         Você é um extrator de produtos. Receberá um TEXTO CRU extraído por OCR. 
         Extrair e devolver **apenas JSON válido** com os campos:
@@ -627,6 +630,45 @@ def get_bedrock_prompt(text_extracted: str):
             "temperature": 0.5
             }
     return bedrock_request_body
+
+
+async def upload_to_s3(s3_client, bucket: str, path: str, file: UploadFile):
+    await s3_client.upload_fileobj(
+        file.file,
+        bucket,
+        path,
+        ExtraArgs={"ContentType": file.content_type},
+    )
+    return f"https://{bucket}.s3.amazonaws.com/{path}"
+
+
+async def extract_text_from_image(textract_client, bucket: str, key: str) -> str:
+    response = await textract_client.detect_document_text(
+        Document={"S3Object": {"Bucket": bucket, "Name": key}}
+    )
+    return "\n".join(
+        block["Text"]
+        for block in response["Blocks"]
+        if block["BlockType"] in ("LINE", "WORD")
+    )
+
+
+async def extract_text_from_pdf(file: UploadFile) -> str:
+    file.file.seek(0)
+    content = await file.read()
+    pdf_reader = PdfReader(BytesIO(content))
+    return "\n".join(page.extract_text() or "" for page in pdf_reader.pages)
+
+
+async def extract_text_from_xml(file: UploadFile) -> str:
+    file.file.seek(0)
+    content = await file.read()
+    try:
+        root = ET.fromstring(content.decode("utf-8"))
+        return ET.tostring(root, encoding="unicode", method="text")
+    except Exception as e:
+        return f"[Erro ao ler XML: {e}]"
+
 
 
 async def find_product_by_id_if_same_enterpryse(id: int, session: AsyncSession, current_user: User):
@@ -739,43 +781,48 @@ async def create_product_by_document_service(
     document: UploadFile,
     session: AsyncSession,
     s3_client,
-    textract_client
+    textract_client,
+    current_user: User,
 ):
     SETTINGS = Settings()
-    IMAGE_MIME_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
-    ext = document.filename.split('.')[-1]
 
-    EMPRESA_DEFAULT_ID = 1  # TODO: Ajustar
+    IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+    TEXT_MIME_TYPES = {"application/pdf", "text/xml", "application/xml"}
+    ext = document.filename.split(".")[-1].lower()
+
+    is_image_mime_type = document.content_type in IMAGE_MIME_TYPES
+
+    if document.content_type not in TEXT_MIME_TYPES and not is_image_mime_type:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Type not supported')
 
     filename_with_ext = (
-        f'uploads/{EMPRESA_DEFAULT_ID}/documents_to_extract/{uuid4()}.{ext}'
+        f"uploads/{current_user.id_empresas}/documents_to_extract/{uuid4()}.{ext}"
     )
 
-    if document.content_type in IMAGE_MIME_TYPES:
-        await s3_client.upload_fileobj(
-            document.file,
-            SETTINGS.S3_BUCKET,
-            filename_with_ext,
-            ExtraArgs={'ContentType': 'image/jpeg'},
-        )
+    document_url = await upload_to_s3(
+        s3_client, SETTINGS.S3_BUCKET, filename_with_ext, document
+    )
 
-    document_db = Document(extracted=False,
-             document_path=f'https://{SETTINGS.S3_BUCKET}.s3.{SETTINGS.REGION}.amazonaws.com/{filename_with_ext}')
+    document_db = Document(
+        extracted=False,
+        id_empresas=current_user.id_empresas,
+        document_path=document_url,
+    )
     session.add(document_db)
     await session.commit()
 
-    response = await textract_client.detect_document_text(
-        Document={
-            "S3Object": {
-                "Bucket": SETTINGS.S3_BUCKET,
-                "Name": filename_with_ext
-            }
-        }
-    )
-    text_clean = "\n".join(
-        block["Text"]
-        for block in response["Blocks"] if block["BlockType"] in ("LINE", "WORD")
-    )
+    if is_image_mime_type:
+        text_clean = await extract_text_from_image(
+            textract_client, SETTINGS.S3_BUCKET, filename_with_ext
+        )
+
+    if ext == "pdf":
+        text_clean = await extract_text_from_pdf(document)
+    elif ext == 'xml':
+        text_clean = await extract_text_from_xml(document)
+    else:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Type not supported')
+
     document_db.extract_result = text_clean
     document_db.extracted = True
     await session.commit()
@@ -857,7 +904,6 @@ async def generate_product_info_from_docs_pre_extracted_service(
     }
 
     document_db.ai_result = str(informations_values)
-    breakpoint()
     await session.commit()
 
     return informations_values
@@ -920,16 +966,15 @@ async def delete_all_products_by_enterpryse_id_service(
         delete(Produto)
         .where(Produto.id_empresas == enterpryse_id)
         )
-    
+
     await session.commit()
     return {'message': 'deleted!'}
 
 
-
-async def create_product_by_document_service_fake(current_user: User,document, session: AsyncSession):
-    document =  Document(extracted=False,
-             document_path=f'https://fake.s3.fake.amazonaws.com/fake.com')
-    document.extract_result = get_text_extracted()
+async def create_product_by_document_service_fake(current_user: User, document, session: AsyncSession):
+    document = Document(extracted=False,
+             document_path='https://fake.s3.fake.amazonaws.com/fake.com')
+    document.extract_result = 'get_text_extracted()'
     document.extracted = True
     document.id_empresas = current_user.id_empresas
     session.add(document)
@@ -937,3 +982,59 @@ async def create_product_by_document_service_fake(current_user: User,document, s
     await session.refresh(document)
 
     return document
+
+
+async def get_all_products_with_analysis_service(
+        session: AsyncSession,
+        filter: FilterPage,
+        current_user: User
+):
+
+    stmt_join = (
+    select(Produto)
+    .join(Previsoes, Produto.id == Previsoes.id_produtos)
+    .where(Produto.id_empresas == current_user.id_empresas)
+    .distinct().limit(filter.limit).offset(filter.offset)
+    )
+    products_db = await session.scalars(stmt_join)
+    return products_db.all()
+
+
+async def update_product_image_service(
+    image: UploadFile,
+    session: AsyncSession,
+    current_user: User,
+    s3_client,
+    product_id):
+    settings = Settings()
+    if not image:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST,
+            detail='No image file was uploaded.',
+        )
+    ALOOWED_MIME_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
+    ext = image.filename.split('.')[-1]
+    if image.content_type not in ALOOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST, detail='Unsupported file type'
+        )
+    filename_with_ext = f'uploads/{current_user.id_empresas}/product/{product_id}/image.{ext}'
+
+    product_db = await session.scalar(select(Produto).where(
+        and_(Produto.id_empresas == current_user.id_empresas, Produto.id == product_id)
+        ))
+
+    if not product_db:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail='Product not found!')
+
+    await s3_client.upload_fileobj(
+        image.file,
+        settings.S3_BUCKET,
+        filename_with_ext,
+        ExtraArgs={'ContentType': 'image/jpeg'},
+    )
+
+    product_db.image = f'https://{settings.S3_BUCKET}.s3.{settings.REGION}.amazonaws.com/{filename_with_ext}'
+    await session.commit()
+
+    return product_db

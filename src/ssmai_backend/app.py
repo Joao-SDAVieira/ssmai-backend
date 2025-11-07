@@ -5,7 +5,7 @@ from sys import platform
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ssmai_backend.routers import enterprises, products, stock, ai_analysis, chatbot
+from ssmai_backend.routers import ai_analysis, enterprises, products, stock
 from ssmai_backend.routers.users import fastapi_users, inject_creator, router
 from ssmai_backend.schemas.root_schemas import Message
 from ssmai_backend.schemas.users_schemas import (
@@ -66,10 +66,10 @@ async def health_check():
 async def chat_with_ssmai(request: ChatRequest):
     """
     Chat with SSMai Assistant
-    
+
     The assistant can answer questions about:
     - Product inventory and counts
-    - Stock movements and transactions  
+    - Stock movements and transactions
     - Company information
     - Database structure and relationships
     - System summaries and reports
@@ -83,22 +83,22 @@ async def chat_with_ssmai(request: ChatRequest):
                 message="MCP server is not connected. Please check server logs and try again later."
             ).dict()
         )
-    
+
     user_query = request.message
-    
+
     try:
         logger.info(f"💬 Processing query: {user_query}")
-        
+
         start_time = time.time()
         response = await mcp_container.client.process_query(user_query)
         processing_time = time.time() - start_time
-        
+
         return ChatResponse(
             query=user_query,
             response=response,
             processing_time=f"{processing_time*1000:.0f}ms"
         )
-        
+
     except Exception as e:
         logger.error(f"Query processing error: {e}")
         from fastapi import HTTPException
@@ -116,10 +116,10 @@ async def startup_event():
     try:
         logger.info("🚀 Auto-connecting to MCP server...")
         mcp_container.client = MCPClient("us.anthropic.claude-3-5-haiku-20241022-v1:0")
-        
+
         # Use absolute path to avoid path issues
         import os
-        
+
         # Try different possible paths for the MCP server
         possible_paths = [
             # Docker environment path
@@ -129,16 +129,16 @@ async def startup_event():
             # Alternative Docker path
             "./src/ssmai_backend/mcp/postgres_server.py"
         ]
-        
+
         server_path = None
         for path in possible_paths:
             if os.path.exists(path):
                 server_path = path
                 break
-        
+
         if not server_path:
             raise Exception(f"MCP server script not found in any of: {possible_paths}")
-        
+
         logger.info(f"🔧 Server path: {server_path}")
         await mcp_container.client.connect_to_server(server_path)
         logger.info("✅ MCP server connected successfully on startup")
@@ -169,7 +169,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=['*'],
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],

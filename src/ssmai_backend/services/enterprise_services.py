@@ -2,6 +2,7 @@ import random
 from http import HTTPStatus
 
 from fastapi import HTTPException
+from fastapi_users.exceptions import UserAlreadyExists
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,7 +36,9 @@ async def create_enterpryse_service(
         raise HTTPException(
             status_code=HTTPStatus.CONFLICT, detail="Enterpryse already exists!"
         )
-    enterpryse_db = Empresa(**enterpryse.model_dump())
+    enterpryse_dict = enterpryse.model_dump()
+    enterpryse_dict.pop('email')
+    enterpryse_db = Empresa(**enterpryse_dict)
 
     session.add(enterpryse_db)
     await session.commit()
@@ -48,18 +51,30 @@ async def create_enterpryse_service(
         name=f'{enterpryse.nome.capitalize()}Admin',
         last_name='',
         description='User created at enterprise creation',
-        email=f'email@{enterpryse.nome}.com',
+        email=enterpryse.email,
         profile_image='',
         password=f'{enterpryse.nome.capitalize()}@{password_default}',
         is_superuser=True
         )
-    user_db = await user_repository.create(user_create=user_admin_default)
+    try:
+        user_db = await user_repository.create(user_create=user_admin_default)
+    except UserAlreadyExists:
+        raise HTTPException(status_code=HTTPStatus.CONFLICT,
+                            detail='Enterpryse already exists!')
+
     session.add(user_db)
     await session.commit()
     await session.refresh(user_db)
     user_admin_default = UserAdminSchema(**user_admin_default.model_dump(), clean_password=f'{enterpryse.nome.capitalize()}@{password_default}')
     user_admin_default.id = user_db.id
-    enterpryse = EnterpryseResponseModel(nome=enterpryse_db.nome, ramo=enterpryse_db.ramo, id=enterpryse_db.id, created_at=enterpryse_db.created_at, updated_at=enterpryse_db.updated_at, user_admin=user_admin_default)
+    enterpryse = EnterpryseResponseModel(nome=enterpryse_db.nome,
+                                         ramo=enterpryse_db.ramo,
+                                         id=enterpryse_db.id,
+                                         created_at=enterpryse_db.created_at,
+                                         updated_at=enterpryse_db.updated_at,
+                                         user_admin=user_admin_default,
+                                         email=user_db.email
+                                         )
 
     return enterpryse
 

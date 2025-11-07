@@ -5,13 +5,17 @@ from pydantic import BaseModel
 from ssmai_backend.enums.products_enums import MovementTypesEnum
 
 
-class StockModel(BaseModel):
+class StockBase(BaseModel):
     id: int
     id_produtos: int
     quantidade_disponivel: int
     custo_medio: float
     created_at: datetime
     updated_at: datetime
+
+
+class StockModel(StockBase):
+   estoque_ideal: float | None
 
 
 class MovimentBaseModel(BaseModel):

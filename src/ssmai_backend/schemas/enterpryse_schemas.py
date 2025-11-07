@@ -1,15 +1,20 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 from ssmai_backend.schemas.users_schemas import UserAdminSchema
 
 
-class EnterpryseSchema(BaseModel):
+class EnterpryseBase(BaseModel):
     nome: str
     ramo: str
 
-class EnterpryseGet(EnterpryseSchema):
+
+class EnterpryseSchema(EnterpryseBase):
+    email: EmailStr
+
+
+class EnterpryseGet(EnterpryseBase):
     id: int
     created_at: datetime
     updated_at: datetime
