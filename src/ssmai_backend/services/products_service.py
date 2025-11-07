@@ -836,7 +836,6 @@ async def create_product_by_document_service(
     ext = document.filename.split(".")[-1].lower()
 
     is_image_mime_type = document.content_type in IMAGE_MIME_TYPES
-    breakpoint()
     if document.content_type not in TEXT_MIME_TYPES and not is_image_mime_type:
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Type not supported')
 
