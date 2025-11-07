@@ -221,7 +221,7 @@ async def get_analysis_by_product_id_service(
         "diary_average": diary_average,
         "demanda_leadtime": demanda_leadtime,  # saida até reposição
         "safety_stock": safety_stock,  # estoque de sgurança, incrementa o stock ideal
-        "estoque_ideal": ideal_stock,  # estoque ideal
+        "estoque_ideal": ideal_stock if ideal_stock > 0 else 1,  # estoque ideal
         "pedir": faltante if faltante > 0 else 0
     }
 
