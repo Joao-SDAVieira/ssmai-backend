@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Setup logging
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -42,70 +42,58 @@ class MCPClient:
         self.mcp_process = None
         self.tools = []
         self.database_context = ""
-        self._mcp_lock = asyncio.Lock()  # Add lock for MCP communication
+        self._mcp_lock = asyncio.Lock()
         
-        # SSMai Context
-        self.ssmai_context = """Você é o assistente do SSMai (Smart Stock Management AI).
+        
+        self.ssmai_context = """
+        VOCÊ É O ASSISTENTE SSMai (Smart Stock Management AI)
 
-        Assistente SSMai (Smart Stock Management AI)
+        INSTRUÇÕES CRÍTICAS:
+        1. SEMPRE use as ferramentas disponíveis para consultar dados reais
+        2. NUNCA diga apenas que vai verificar - EXECUTE a consulta imediatamente
+        3. Use query_database para todas as consultas sobre produtos, estoque e movimentações
+        4. Forneça respostas baseadas em dados reais do banco de dados
+        5. Responda SEMPRE em um texto só.
 
-        Função:
-        Você é o assistente inteligente de gestão de estoque SSMai (Smart Stock Management AI).
+        FERRAMENTAS OBRIGATÓRIAS:
+        - Para qualquer pergunta sobre estoque/produtos/movimentações: USE query_database
+        - Para listar tabelas: USE list_tables  
+        - Para ver estrutura: USE describe_table
+        - Para contar registros: USE count_records
+        - Para data atual: USE get_current_date
 
-        Regra Fundamental:
-        Jamais invente, assuma ou imagine dados.
-        Responda somente com base nas informações fornecidas no contexto.
-        Se algo não estiver disponível, informe explicitamente.
+        EXEMPLOS DE USO CORRETO:
+        Pergunta: "Quantos produtos temos?"
+        Ação: Use query_database com "SELECT COUNT(*) FROM produtos WHERE id_empresas = X"
 
-        SEGURANÇA E PRIVACIDADE:
-        - SEMPRE filtrar dados por empresa do usuário
+        Pergunta: "Tivemos movimentações hoje?"  
+        Ação: Use query_database diretamente com a data atual fornecida: "SELECT * FROM movimentacoes_estoque me JOIN produtos p ON me.id_produtos = p.id WHERE p.id_empresas = X AND DATE(me.date) = 'YYYY-MM-DD'"
+
+        REGRAS DE SEGURANÇA:
+        - SEMPRE filtrar por empresa do usuário (WHERE id_empresas = X)
         - NUNCA mostrar dados de outras empresas
-        - Usar sempre filtros WHERE id_empresas = [ID_DA_EMPRESA]
-        - Para consultas em estoque/movimentações, fazer JOIN com produtos para filtrar por empresa
-        - NUNCA mencionar IDs de empresa nas respostas ao usuário
-        - NUNCA mencionar ferramentas técnicas ou processos internos
+        - Para estoque/movimentações: sempre JOIN com produtos para filtrar empresa
 
-        Suas Capacidades:
-        - Consultar produtos, categorias e estoques da empresa do usuário
-        - Visualizar históricos e movimentações da empresa do usuário
-        - Responder apenas com dados factuais e verificáveis da empresa autorizada
+        ESTILO DE RESPOSTA:
+        - Seja direto e factual
+        - Use apenas dados reais consultados
+        - Se não há dados, diga claramente
+        - NUNCA mencione IDs de empresa ao usuário
+        - NUNCA mencione processos técnicos
+        - IMPORTANTE, as datas no banco estão no formato utc. É necessário fazer essa conversão para UTC-3 Horário de Brasília.
 
-        Quando Não Houver Dados:
-        Se o contexto não contiver informações suficientes, responda de forma clara:
-        "Não há dados disponíveis para sua empresa."
-        ou
-        "Não foram encontrados [produtos/movimentações/etc] para sua empresa neste período."
-
-        Jamais crie:
-        - Nomes de produtos
-        - Quantidades
-        - Transações ou movimentações fictícias
-
-        Estilo de Resposta:
-        - Seja conciso e direto 
-        - Utilize apenas dados reais da empresa do usuário
-        - Evite explicações longas ou especulações
-        - Priorize clareza e objetividade
-        - NUNCA mencione IDs de empresa, ferramentas ou processos técnicos
-        - Responda de forma natural, como se fosse um assistente humano
-
-        Exemplo de Resposta Correta:
-        Com dados: "Você possui 15 unidades do produto X em estoque."
-        Sem dados: "Não foram encontradas movimentações neste período."
-        
-        PROIBIDO mencionar:
-        - "empresa ID X"
-        - "para a empresa X"
-        - "verificando dados da empresa"
-        - "[Calling tool...]"
-        - Qualquer referência técnica interna\""""
+        PROIBIDO:
+        - Responder sem consultar dados
+        - Inventar informações
+        - Mencionar "vou verificar" sem executar
+        - Mostrar dados de outras empresas"""
 
     async def connect_to_server(self, server_path: str):
         """Connect to MCP server"""
         try:
             logger.info(f"🔌 Connecting to MCP server: {server_path}")
             
-            # Start the MCP server process
+            
             self.mcp_process = await asyncio.create_subprocess_exec(
                 'python3', server_path,
                 stdin=asyncio.subprocess.PIPE,
@@ -119,10 +107,10 @@ class MCPClient:
                 stderr_output = await self.mcp_process.stderr.read()
                 raise Exception(f"MCP server process failed to start: {stderr_output.decode()}")
             
-            # Get available tools
+            
             await self._initialize_tools()
             
-            # Map database structure
+            
             logger.info("🔍 Mapeando estrutura do banco de dados...")
             self.database_context = await self._map_database_structure()
             
@@ -141,7 +129,7 @@ class MCPClient:
 
     async def _send_mcp_request(self, method: str, params: Optional[Dict] = None) -> Dict:
         """Send request to MCP server with concurrency protection"""
-        async with self._mcp_lock:  # Protect MCP communication with lock
+        async with self._mcp_lock:  
             request = {
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -150,16 +138,16 @@ class MCPClient:
             }
             
             try:
-                # Send request
+                
                 request_json = json.dumps(request) + "\n"
                 self.mcp_process.stdin.write(request_json.encode())
                 await self.mcp_process.stdin.drain()
                 
-                # Read response with timeout
+                
                 try:
                     response_line = await asyncio.wait_for(
                         self.mcp_process.stdout.readline(), 
-                        timeout=15.0  # Increased timeout
+                        timeout=15.0  
                     )
                 except asyncio.TimeoutError:
                     raise Exception("MCP server timeout - no response received")
@@ -211,9 +199,9 @@ class MCPClient:
             except Exception as e:
                 logger.error(f"Error calling tool {name} (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(1)  # Wait before retry
+                    await asyncio.sleep(1)  
                 else:
-                    # Return empty result on final failure to prevent complete breakdown
+                    
                     return {"content": f"Error executing {name}: {str(e)}"}
             return {"content": f"Error: {str(e)}"}
 
@@ -222,26 +210,26 @@ class MCPClient:
         try:
             db_context = DatabaseContext(tables=[], relationships=[], summary="")
             
-            # Get all tables
+            
             tables_result = await self.call_tool("list_tables", {})
             tables_content = tables_result.get("content", "")
             
-            # Extract table names
+            
             table_names = []
             for line in tables_content.split('\n'):
                 if line.startswith('- '):
                     table_names.append(line[2:].strip())
             
-            # Analyze each table
+            
             for table_name in table_names:
                 logger.info(f"📋 Analisando tabela: {table_name}")
                 
-                # Get table schema
+                
                 try:
                     schema_result = await self.call_tool("describe_table", {"table_name": table_name})
                     schema_content = schema_result.get("content", "")
                     
-                    # Parse schema JSON
+                    
                     schema_data = []
                     if "Schema for table" in schema_content:
                         json_match = re.search(r':\n(.*)', schema_content, re.DOTALL)
@@ -251,13 +239,13 @@ class MCPClient:
                     logger.warning(f"⚠️  Erro ao obter schema para {table_name}: {e}")
                     schema_data = []
                 
-                # Get record count
+                
                 count_result = await self.call_tool("count_records", {"table_name": table_name})
                 count_content = count_result.get("content", "")
                 count_match = re.search(r'Total records: (\d+)', count_content)
                 record_count = int(count_match.group(1)) if count_match else 0
                 
-                # Get sample data
+                
                 sample_data = []
                 if record_count > 0:
                     try:
@@ -279,10 +267,10 @@ class MCPClient:
                     sampleData=sample_data
                 ))
             
-            # Generate relationships
+            
             db_context.relationships = self._find_relationships(db_context.tables)
             
-            # Generate summary
+            
             db_context.summary = self._generate_summary(db_context)
             
             logger.info("✅ Mapeamento do banco concluído!")
@@ -300,12 +288,12 @@ class MCPClient:
         for table in tables:
             for column in table.columns:
                 column_name = column.get('column_name', '')
-                # Look for foreign key patterns
+                
                 if column_name.startswith('id_') or column_name.endswith('_id'):
                     referenced_table = column_name.replace('id_', '').replace('_id', '')
                     plural_table = referenced_table + 's'
                     
-                    # Check if referenced table exists
+                    
                     target_table = None
                     for t in tables:
                         if (t.tableName == referenced_table or 
@@ -346,64 +334,26 @@ Principais tabelas: {main_tables_str}"""
             
             if table.columns:
                 context += "  Colunas:\n"
-                for col in table.columns[:5]:  # Limit columns shown
+                for col in table.columns[:5]:  
                     context += f"    - {col.get('column_name')}: {col.get('data_type')}\n"
             
             if table.sampleData:
                 context += "  Dados de exemplo:\n"
-                for i, row in enumerate(table.sampleData[:2]):  # Show 2 sample rows
+                for i, row in enumerate(table.sampleData[:2]):  
                     context += f"    Registro {i+1}: {dict(list(row.items())[:3])}\n"
         
         if db_context.relationships:
             context += f"\nRELACIONAMENTOS:\n"
-            for rel in db_context.relationships[:10]:  # Show first 10
+            for rel in db_context.relationships[:10]:  
                 context += f"  - {rel}\n"
         
         context += "\n=== FIM DO CONTEXTO ===\n"
         return context
 
-    def _clean_response(self, response: str) -> str:
-        """Remove technical messages and company references from AI response"""
-        logger.info(f"🧹 Cleaning response with {len(response.split())} lines")
-        lines = response.split('\n')
-        filtered_lines = []
-        removed_lines = []
-        
-        tech_patterns = [
-            re.compile(r'^\[Calling tool .* with.*\]$'),
-            re.compile(r'^\[Tool call:.*\]$'),
-            re.compile(r'^\[Using tool:.*\]$'),
-            re.compile(r'^\[Executing:.*\]$'),
-            re.compile(r'^Tool result:', re.IGNORECASE),
-            re.compile(r'^Calling function:', re.IGNORECASE),
-            re.compile(r'^Function call:', re.IGNORECASE),
-            # Remove company ID references
-            re.compile(r'.*empresa ID \d+.*', re.IGNORECASE),
-            re.compile(r'.*para a empresa \d+.*', re.IGNORECASE),
-            re.compile(r'.*da empresa \d+.*', re.IGNORECASE),
-            # Remove verification messages
-            re.compile(r'^Vou verificar.*empresa.*', re.IGNORECASE),
-            re.compile(r'^Para responder.*empresa.*', re.IGNORECASE),
-        ]
-        
-        for line in lines:
-            line_stripped = line.strip()
-            if not any(pattern.match(line_stripped) for pattern in tech_patterns):
-                filtered_lines.append(line)
-            else:
-                removed_lines.append(line_stripped)
-        
-        if removed_lines:
-            logger.info(f"🗑️  Removed {len(removed_lines)} technical/company ID lines")
-        
-        cleaned = '\n'.join(filtered_lines).strip()
-        logger.info(f"🧹 Cleaning complete: {len(cleaned)} characters final")
-        return cleaned
-
     async def process_query(self, query: str) -> str:
         """Process user query using Claude 3.5 Haiku"""
         try:
-            # Create message with context
+            
             full_context = f"{self.ssmai_context}\n{self.database_context}"
             
             messages = [{
@@ -411,7 +361,7 @@ Principais tabelas: {main_tables_str}"""
                 "content": f"{full_context}\n\nUsuário: {query}"
             }]
             
-            # Prepare tools for Bedrock
+            
             tools_for_bedrock = []
             if self.tools:
                 for tool in self.tools:
@@ -421,10 +371,10 @@ Principais tabelas: {main_tables_str}"""
                         "input_schema": tool["input_schema"]
                     })
             
-            # Create request payload
+            
             payload = {
                 "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": 4096,  # Increased token limit
+                "max_tokens": 4096,  
                 "top_k": 250,
                 "stop_sequences": [],
                 "temperature": 0.7,
@@ -435,7 +385,7 @@ Principais tabelas: {main_tables_str}"""
             if tools_for_bedrock:
                 payload["tools"] = tools_for_bedrock
             
-            # Invoke Bedrock
+            
             response = self.bedrock_client.invoke_model(
                 modelId=self.model_id,
                 contentType="application/json",
@@ -443,11 +393,11 @@ Principais tabelas: {main_tables_str}"""
                 body=json.dumps(payload)
             )
             
-            # Parse response
+            
             response_body = json.loads(response['body'].read())
             final_text = []
             
-            # Process response content
+            
             for content in response_body.get("content", []):
                 if content["type"] == "text":
                     final_text.append(content["text"])
@@ -455,13 +405,13 @@ Principais tabelas: {main_tables_str}"""
                     tool_name = content["name"]
                     tool_args = content["input"]
                     
-                    # Call the MCP tool
+                    
                     result = await self.call_tool(tool_name, tool_args)
                     
-                    # Add technical message (will be filtered later)
+                    
                     final_text.append(f"[Calling tool {tool_name} with args {json.dumps(tool_args)}]")
                     
-                    # Handle follow-up with tool result
+                    
                     messages.append({
                         "role": "assistant",
                         "content": [{
@@ -482,10 +432,10 @@ Principais tabelas: {main_tables_str}"""
                         }]
                     })
                     
-                    # Follow-up request
+                    
                     follow_up_payload = {
                         "anthropic_version": "bedrock-2023-05-31",
-                        "max_tokens": 4096,  # Increased token limit for follow-up
+                        "max_tokens": 4096,  
                         "top_k": 250,
                         "stop_sequences": [],
                         "temperature": 0.7,
@@ -512,10 +462,9 @@ Principais tabelas: {main_tables_str}"""
             raw_response = "\n".join(final_text)
             logger.info(f"🔍 Raw response length: {len(raw_response)} characters")
             logger.info(f"🔍 Raw response preview: {raw_response[:200]}...")
-            cleaned_response = self._clean_response(raw_response)
-            logger.info(f"🔍 Cleaned response length: {len(cleaned_response)} characters")
-            return cleaned_response
-            
+            logger.info(f"🔍 Cleaned response length: {len(response)} characters")
+            return response
+
         except Exception as e:
             logger.error(f"Error processing query: {e}")
             return f"Error: {str(e)}"
@@ -523,35 +472,111 @@ Principais tabelas: {main_tables_str}"""
     async def process_query_with_company_filter(self, query: str, company_id: int) -> str:
         """Process user query using Claude 3.5 Haiku with company filtering"""
         try:
-            # Enhanced context with company filtering instructions
-            company_context = f"""
-            IMPORTANTE: FILTRO POR EMPRESA
-            - O usuário pertence à empresa ID: {company_id}
-            - TODAS as consultas devem ser filtradas por esta empresa
-            - Para produtos: WHERE id_empresas = {company_id}
-            - Para estoque: JOIN com produtos WHERE produtos.id_empresas = {company_id}
-            - Para movimentações: JOIN com produtos WHERE produtos.id_empresas = {company_id}
-            - NUNCA mostrar dados de outras empresas
-            - Se não encontrar dados para esta empresa, informar que não há dados disponíveis
             
-            REGRAS DE RESPOSTA AO USUÁRIO:
-            - NUNCA mencione "empresa ID {company_id}" ou similar
-            - NUNCA fale sobre "verificar dados da empresa X"
-            - Responda como se os dados fossem naturalmente do usuário
-            - Use "Você possui" ao invés de "Sua empresa possui"
-            - Use "Seu estoque" ao invés de "Estoque da empresa"
-            - Seja direto e natural na comunicação
+            from datetime import datetime
+            current_date = datetime.now().strftime('%Y-%m-%d')
+            current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            
+            company_context = f"""
+            FILTRO OBRIGATÓRIO POR EMPRESA ID: {company_id}
+            DATA ATUAL: {current_date} ({current_datetime})
+            
+            CONSULTAS OBRIGATÓRIAS:
+            - Para produtos: SELECT * FROM produtos WHERE id_empresas = {company_id}
+            - Para estoque: SELECT e.*, p.nome FROM estoque e JOIN produtos p ON e.id_produtos = p.id WHERE p.id_empresas = {company_id}
+            - Para movimentações: SELECT me.*, p.nome FROM movimentacoes_estoque me JOIN produtos p ON me.id_produtos = p.id WHERE p.id_empresas = {company_id}
+            - Para movimentações de HOJE ({current_date}): WHERE p.id_empresas = {company_id} AND DATE(me.date) = '{current_date}'
+            
+            EXECUTE SEMPRE:
+            1. Use query_database para TODA pergunta sobre dados
+            2. Aplique sempre o filtro de empresa
+            3. Para perguntas sobre "hoje", use a data '{current_date}'
+            4. Retorne dados reais, não promessas
+            
+            RESPOSTA AO USUÁRIO:
+            - Seja natural: "Você tem X produtos" 
+            - NUNCA mencione empresa ID {company_id}
+            - Forneça dados específicos e quantitativos
             """
             
-            # Create message with context including company filter
+            
             full_context = f"{self.ssmai_context}\n{self.database_context}\n{company_context}"
             
-            messages = [{
-                "role": "user",
-                "content": f"{full_context}\n\nUsuário da empresa {company_id}: {query}"
-            }]
             
-            # Prepare tools for Bedrock
+            messages = [
+                {
+                    "role": "user",
+                    "content": "EXEMPLOS de uso correto das ferramentas:"
+                },
+                {
+                    "role": "assistant",
+                    "content": "Entendido. Sempre usarei as ferramentas imediatamente."
+                },
+                {
+                    "role": "user", 
+                    "content": "Pergunta: 'Quantos produtos temos?'"
+                },
+                {
+                    "role": "assistant", 
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "example_1",
+                            "name": "query_database",
+                            "input": {"query": "SELECT COUNT(*) as total FROM produtos WHERE id_empresas = 1"}
+                        }
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "example_1", 
+                            "content": "Results:\n[{\"total\": 5}]"
+                        }
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": "Você possui 5 produtos cadastrados no sistema."
+                },
+                {
+                    "role": "user",
+                    "content": f"Pergunta: 'Tivemos movimentações hoje?' ou 'Tivemos movimentações no estoque hoje?' (DATA ATUAL: {current_date})"
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use", 
+                            "id": "example_2",
+                            "name": "query_database",
+                            "input": {"query": f"SELECT me.tipo, me.quantidade, p.nome, me.date FROM movimentacoes_estoque me JOIN produtos p ON me.id_produtos = p.id WHERE p.id_empresas = 1 AND DATE(me.date) = '{current_date}'"}
+                        }
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "example_2",
+                            "content": "Results:\n[]"
+                        }
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": f"Não houve movimentações no estoque hoje ({current_date})."
+                },                {
+                    "role": "user",
+                    "content": f"{full_context}\n\nDATA ATUAL: {current_date}\n\nAGORA responda usando query_database IMEDIATAMENTE:\n\nUsuário da empresa {company_id}: {query}\n\nSe a pergunta mencionar 'hoje', use a data '{current_date}' nas consultas SQL."
+                }
+            ]
+            
+            
             tools_for_bedrock = []
             if self.tools:
                 for tool in self.tools:
@@ -561,21 +586,21 @@ Principais tabelas: {main_tables_str}"""
                         "input_schema": tool["input_schema"]
                     })
             
-            # Create request payload
+            
             payload = {
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": 4096,
                 "top_k": 250,
                 "stop_sequences": [],
-                "temperature": 0.7,
-                "top_p": 0.999,
+                "temperature": 0.0,  
+                "top_p": 0.9,
                 "messages": messages
             }
             
             if tools_for_bedrock:
                 payload["tools"] = tools_for_bedrock
             
-            # Invoke Bedrock
+            
             response = self.bedrock_client.invoke_model(
                 modelId=self.model_id,
                 contentType="application/json",
@@ -583,11 +608,18 @@ Principais tabelas: {main_tables_str}"""
                 body=json.dumps(payload)
             )
             
-            # Parse response
+            
             response_body = json.loads(response['body'].read())
+            
+            
+            logger.info("=" * 80)
+            logger.info("🤖 CLAUDE COMPLETE RESPONSE DEBUG (process_query_with_company_filter):")
+            logger.info(f"📝 Full response body: {json.dumps(response_body, indent=2, ensure_ascii=False)}")
+            logger.info("=" * 80)
+            
             final_text = []
             
-            # Process response content
+            
             for content in response_body.get("content", []):
                 if content["type"] == "text":
                     final_text.append(content["text"])
@@ -595,19 +627,19 @@ Principais tabelas: {main_tables_str}"""
                     tool_name = content["name"]
                     tool_args = content["input"]
                     
-                    # Modify SQL queries to include company filter
+                    
                     if tool_name == "query_database" and "query" in tool_args:
                         original_query = tool_args["query"]
                         filtered_query = self._add_company_filter_to_query(original_query, company_id)
                         tool_args["query"] = filtered_query
                         logger.info(f"🏢 Applied company filter to query: {filtered_query[:100]}...")
                     
-                    # Call the MCP tool
+                    
                     result = await self.call_tool(tool_name, tool_args)
                     
-                    # Skip technical messages - they will be filtered out
                     
-                    # Handle follow-up with tool result
+                    
+                    
                     messages.append({
                         "role": "assistant",
                         "content": [{
@@ -628,14 +660,14 @@ Principais tabelas: {main_tables_str}"""
                         }]
                     })
                     
-                    # Follow-up request
+                    
                     follow_up_payload = {
                         "anthropic_version": "bedrock-2023-05-31",
                         "max_tokens": 4096,
                         "top_k": 250,
                         "stop_sequences": [],
-                        "temperature": 0.7,
-                        "top_p": 0.999,
+                        "temperature": 0.0,  
+                        "top_p": 0.9,
                         "messages": messages
                     }
                     
@@ -657,8 +689,7 @@ Principais tabelas: {main_tables_str}"""
             
             raw_response = "\n".join(final_text)
             logger.info(f"🔍 Raw response length: {len(raw_response)} characters")
-            cleaned_response = self._clean_response(raw_response)
-            validated_response = self._validate_company_access(cleaned_response, company_id)
+            validated_response = self._validate_company_access(raw_response, company_id)
             logger.info(f"🏢 Company-filtered response for company {company_id}: {len(validated_response)} characters")
             return validated_response
             
@@ -670,51 +701,51 @@ Principais tabelas: {main_tables_str}"""
         """Add company filter to SQL queries automatically"""
         query_upper = query.upper().strip()
         
-        # If it's not a SELECT query, return as is
+        
         if not query_upper.startswith('SELECT'):
             return query
         
-        # If it already contains a filter for id_empresas, return as is
+        
         if 'ID_EMPRESAS' in query_upper:
             return query
         
-        # Check if query involves tables that need company filtering
+        
         needs_filtering = any(table in query_upper for table in ['PRODUTO', 'ESTOQUE', 'MOVIMENTACAO', 'MOVIMENT'])
         
         if not needs_filtering:
             return query
         
         try:
-            # More sophisticated filtering based on table patterns
+            
             if 'FROM PRODUTO' in query_upper or 'FROM PRODUTOS' in query_upper:
-                # Direct produtos table query
+                
                 if 'WHERE' in query_upper:
-                    # Add to existing WHERE clause with proper parentheses
+                    
                     where_index = query_upper.find('WHERE')
-                    before_where = query[:where_index + 5]  # Include 'WHERE'
+                    before_where = query[:where_index + 5]  
                     after_where = query[where_index + 5:]
                     query = f"{before_where} id_empresas = {company_id} AND ({after_where.strip()})"
                 else:
-                    # Add new WHERE clause
+                    
                     query = query.rstrip(';') + f' WHERE id_empresas = {company_id}'
             
             elif 'ESTOQUE' in query_upper or 'MOVIMENTACAO' in query_upper:
-                # For queries involving estoque or movimentacao, ensure JOIN with produtos
+                
                 if 'JOIN' not in query_upper:
-                    # Add instruction for AI to include proper JOIN
+                    
                     query = f"-- IMPORTANTE: Incluir JOIN com produtos e filtrar por id_empresas = {company_id}\n{query}"
                 else:
-                    # Try to add WHERE clause for existing JOINs
+                    
                     if 'WHERE' not in query_upper:
                         query = query.rstrip(';') + f' WHERE produtos.id_empresas = {company_id}'
                     else:
-                        # Add to existing WHERE with proper table prefix
+                        
                         where_index = query_upper.find('WHERE')
                         before_where = query[:where_index + 5]
                         after_where = query[where_index + 5:]
                         query = f"{before_where} produtos.id_empresas = {company_id} AND ({after_where.strip()})"
             
-            # Count queries need special handling
+            
             elif 'COUNT(' in query_upper:
                 if 'WHERE' not in query_upper:
                     query = query.rstrip(';') + f' WHERE id_empresas = {company_id}'
@@ -729,7 +760,7 @@ Principais tabelas: {main_tables_str}"""
             
         except Exception as e:
             logger.warning(f"Could not automatically apply company filter: {e}")
-            # Fallback: add instruction comment
+            
             return f"-- FILTRAR POR EMPRESA {company_id}: WHERE id_empresas = {company_id}\n{query}"
 
     async def cleanup(self):
@@ -763,10 +794,10 @@ Principais tabelas: {main_tables_str}"""
     def _validate_company_access(self, query_result: str, company_id: int) -> str:
         """Validate that query results don't contain data from other companies"""
         try:
-            # Log for security audit
+            
             logger.info(f"🔒 Company data access validated for company {company_id}")
             
-            # Return clean result without company ID exposure
+            
             return query_result
             
         except Exception as e:
