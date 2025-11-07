@@ -42,7 +42,24 @@ class PostgreSQLMCPServer:
         self.tools = [
             {
                 "name": "query_database",
-                "description": "Execute a SQL query on the PostgreSQL database",
+                "description": """
+                                Execute a SQL query on the PostgreSQL database
+
+                                    Example query:
+                                
+                                    SELECT 
+                                        p.nome,
+                                        me.tipo,
+                                        me.quantidade,
+                                        me.preco_und,
+                                        me.date,
+                                        me.updated_at
+                                    FROM movimentacoes_estoque me
+                                    LEFT JOIN produtos p ON me.id_produtos = p.id
+                                    WHERE me.date >= '2025-11-05 00:00:00'
+                                    AND me.date < '2025-11-06 00:00:00' 
+                                    
+                                    """,
                 "input_schema": {
                     "type": "object",
                     "properties": {
