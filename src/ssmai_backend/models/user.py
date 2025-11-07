@@ -2,7 +2,7 @@ from datetime import datetime
 
 from fastapi_users.db import SQLAlchemyBaseUserTable
 from sqlalchemy import ForeignKey, Integer, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ssmai_backend.models.produto import table_registry
 
@@ -27,3 +27,6 @@ class User(SQLAlchemyBaseUserTable[int]):
     updated_at: Mapped[datetime] = mapped_column(
         nullable=False, onupdate=func.now(), server_default=func.now()
     )
+
+    # Relationship to chat conversations
+    chat_conversations = relationship("ChatConversation", back_populates="user", cascade="all, delete-orphan")

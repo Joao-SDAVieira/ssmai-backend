@@ -1,12 +1,20 @@
 services:
   stock_application_database:
     image: postgres:16
+    container_name: db
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-    - "5432:5432"
+      - "5432:5432"
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ssmai-network
   stock_application_api:
     image: stock_application_api
     entrypoint: ./entrypoint.sh
@@ -14,8 +22,15 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - stock_application_database
+      stock_application_database:
+        condition: service_healthy
     env_file:
       - .env
+    networks:
+      - ssmai-network
 volumes:
   pgdata:
+
+networks:
+  ssmai-network:
+    driver: bridge
