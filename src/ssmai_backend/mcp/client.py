@@ -66,9 +66,12 @@ class MCPClient:
         Pergunta: "Quantos produtos temos?"
         Ação: Use query_database com "SELECT COUNT(*) FROM produtos WHERE id_empresas = X"
 
-        Pergunta: "Tivemos movimentações hoje?"  
-        Ação: Use query_database diretamente com a data atual fornecida: "SELECT * FROM movimentacoes_estoque me JOIN produtos p ON me.id_produtos = p.id WHERE p.id_empresas = X AND DATE(me.date) = 'YYYY-MM-DD'"
-
+        Para querys que tragam muitas informações, foque em fazer uma soma total, exemplo:
+        Pergunta: "Quantas movimentações tivemos hoje?"
+        Ação: Use query_database diretamente com a data atual fornecida: "SELECT * FROM movimentacoes_estoque me JOIN produtos p ON me.id_produtos = p.id WHERE p.id_empresas = X AND DATE(me.date) = 'YYYY-MM-DD' LIMIT 5"
+        Se a quantidade retornar 5 registros, avisa que possívelmente há mais registros, mas que você está limitada a mostrar 5. 
+        Isso vale para qualquer outra query que possa retornar múltiplos registros.
+        
         REGRAS DE SEGURANÇA:
         - SEMPRE filtrar por empresa do usuário (WHERE id_empresas = X)
         - NUNCA mostrar dados de outras empresas
