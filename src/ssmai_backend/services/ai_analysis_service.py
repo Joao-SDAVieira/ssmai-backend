@@ -111,6 +111,8 @@ async def prepare_dataframe_to_train(df_dataset: pd.DataFrame, product_id: int =
 
 
 async def create_forecast(df_to_prophet: pd.DataFrame, ai_model: Prophet) -> pd.DataFrame:
+    if df_to_prophet.shape[0] < 2 or df_to_prophet["y"].sum() == 0:
+        raise ValueError("Produto com dados insuficientes para previsão.")
     ai_model.fit(df_to_prophet)
 
     df_future = ai_model.make_future_dataframe(periods=15)
@@ -176,10 +178,14 @@ async def update_ai_predictions_to_enterpryse_service(
     df_dataset = await generate_moviments_df(session)
     product_ids = df_dataset['id_produto'].unique()
     for product_id in product_ids:
-        ai_model = Prophet()
-        df_to_prophet = await prepare_dataframe_to_train(df_dataset, product_id)
-        df_forecast = await create_forecast(df_to_prophet, ai_model)
-        await add_forecast_on_db_by_product_id(product_id, df_forecast, session)
+        try:
+            ai_model = Prophet()
+            df_to_prophet = await prepare_dataframe_to_train(df_dataset, product_id)
+            df_forecast = await create_forecast(df_to_prophet, ai_model)
+            await add_forecast_on_db_by_product_id(product_id, df_forecast, session)
+        except ValueError as e:
+            print(f"[WARN] Produto {product_id}: {e}")
+            continue
     await session.commit()
     return {"message": 'Coleta realizada'}
 
