@@ -1,11 +1,14 @@
 from http import HTTPStatus
 from json import dumps, loads
 from uuid import uuid4
+from io import BytesIO
+import xml.etree.ElementTree as ET
 
 import pandas as pd
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import and_, delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from PyPDF2 import PdfReader
 
 from ssmai_backend.models.document import Document
 from ssmai_backend.models.produto import Estoque, Previsoes, Produto
@@ -629,6 +632,45 @@ def get_bedrock_prompt(text_extracted: str):
     return bedrock_request_body
 
 
+async def upload_to_s3(s3_client, bucket: str, path: str, file: UploadFile):
+    await s3_client.upload_fileobj(
+        file.file,
+        bucket,
+        path,
+        ExtraArgs={"ContentType": file.content_type},
+    )
+    return f"https://{bucket}.s3.amazonaws.com/{path}"
+
+
+async def extract_text_from_image(textract_client, bucket: str, key: str) -> str:
+    response = await textract_client.detect_document_text(
+        Document={"S3Object": {"Bucket": bucket, "Name": key}}
+    )
+    return "\n".join(
+        block["Text"]
+        for block in response["Blocks"]
+        if block["BlockType"] in ("LINE", "WORD")
+    )
+
+
+async def extract_text_from_pdf(file: UploadFile) -> str:
+    file.file.seek(0)
+    content = await file.read()
+    pdf_reader = PdfReader(BytesIO(content))
+    return "\n".join(page.extract_text() or "" for page in pdf_reader.pages)
+
+
+async def extract_text_from_xml(file: UploadFile) -> str:
+    file.file.seek(0)
+    content = await file.read()
+    try:
+        root = ET.fromstring(content.decode("utf-8"))
+        return ET.tostring(root, encoding="unicode", method="text")
+    except Exception as e:
+        return f"[Erro ao ler XML: {e}]"
+
+
+
 async def find_product_by_id_if_same_enterpryse(id: int, session: AsyncSession, current_user: User):
     product_db = await session.scalar(select(Produto).where(Produto.id == id))
     if not product_db:
@@ -740,41 +782,47 @@ async def create_product_by_document_service(
     session: AsyncSession,
     s3_client,
     textract_client,
-    current_user: User
+    current_user: User,
 ):
     SETTINGS = Settings()
-    IMAGE_MIME_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
-    ext = document.filename.split('.')[-1]
+
+    IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+    TEXT_MIME_TYPES = {"application/pdf", "text/xml", "application/xml"}
+    ext = document.filename.split(".")[-1].lower()
+
+    is_image_mime_type = document.content_type in IMAGE_MIME_TYPES
+
+    if document.content_type not in TEXT_MIME_TYPES and not is_image_mime_type:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Type not supported')
 
     filename_with_ext = (
-        f'uploads/{current_user.id_empresas}/documents_to_extract/{uuid4()}.{ext}'
+        f"uploads/{current_user.id_empresas}/documents_to_extract/{uuid4()}.{ext}"
     )
 
-    if document.content_type in IMAGE_MIME_TYPES:
-        await s3_client.upload_fileobj(
-            document.file,
-            SETTINGS.S3_BUCKET,
-            filename_with_ext,
-            ExtraArgs={'ContentType': 'image/jpeg'},
-        )
+    document_url = await upload_to_s3(
+        s3_client, SETTINGS.S3_BUCKET, filename_with_ext, document
+    )
 
-    document_db = Document(extracted=False, id_empresas=current_user.id_empresas,
-             document_path=f'https://{SETTINGS.S3_BUCKET}.s3.{SETTINGS.REGION}.amazonaws.com/{filename_with_ext}')
+    document_db = Document(
+        extracted=False,
+        id_empresas=current_user.id_empresas,
+        document_path=document_url,
+    )
     session.add(document_db)
     await session.commit()
 
-    response = await textract_client.detect_document_text(
-        Document={
-            "S3Object": {
-                "Bucket": SETTINGS.S3_BUCKET,
-                "Name": filename_with_ext
-            }
-        }
-    )
-    text_clean = "\n".join(
-        block["Text"]
-        for block in response["Blocks"] if block["BlockType"] in ("LINE", "WORD")
-    )
+    if is_image_mime_type:
+        text_clean = await extract_text_from_image(
+            textract_client, SETTINGS.S3_BUCKET, filename_with_ext
+        )
+
+    if ext == "pdf":
+        text_clean = await extract_text_from_pdf(document)
+    elif ext == 'xml':
+        text_clean = await extract_text_from_xml(document)
+    else:
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Type not supported')
+
     document_db.extract_result = text_clean
     document_db.extracted = True
     await session.commit()
