@@ -642,7 +642,7 @@ def get_bedrock_prompt(text_extracted: str):
     SACOS P/ LIXO Med. 63 cm X 80 cm Contém 10 unid. 50 50L JHIENE
     **OUTPUT:**  
     ```json
-    {
+    {{
     "tipo_produto": "Saco para lixo",
     "capacidade": 50,
     "unidade_de_medida_capacidade": "litros",
@@ -651,7 +651,7 @@ def get_bedrock_prompt(text_extracted: str):
     "marca": "JHIENE",
     "tamanho": "63 cm x 80 cm",
     "raw_text": "SACOS P/ LIXO Med. 63 cm X 80 cm Contém 10 unid. 50 50L JHIENE"
-    }
+    }}
     Entrada aceita:
     - Texto cru OCR contendo nome, medidas, unidades e marca de produto.
     Entrada rejeitada:
