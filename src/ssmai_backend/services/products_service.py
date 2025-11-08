@@ -1,8 +1,9 @@
 from http import HTTPStatus
-from json import dumps, loads
+from json import dumps, loads, JSONDecodeError
 from uuid import uuid4
 from io import BytesIO
 import xml.etree.ElementTree as ET
+from re import sub
 
 import pandas as pd
 from fastapi import HTTPException, UploadFile
@@ -575,17 +576,18 @@ from ssmai_backend.settings import Settings
 def get_bedrock_prompt(text_extracted: str):
     # text_extracted = get_text_extracted()
 
-    prompt = f"""Você é um extrator de produtos. Receberá um TEXTO CRU extraído por OCR.  
+    prompt = f"""
+    Você é um extrator de produtos. Receberá um TEXTO CRU extraído por OCR.  
 
     Extrair e devolver **apenas JSON válido** com os campos:
     - tipo_produto (string)  
     - capacidade (número, sem unidade)  
     - unidade_de_medida_capacidade (litros, kg, unidades, etc)  
     - quantidade_individual (int) → unidades por embalagem (ex: "Contém 10 unid." → 10)  
-    - quantidade_entrada (int) → quantos pacotes/itens estão entrando (se presente)  
+    - quantidade_entrada (int) → quantos pacotes/itens estão entrando (se presente) atenção a esse campo, não pode ser confundido ou esquecido 
     - marca (string)  
-    - tamanho (string) → formato "63 cm x 80 cm" se aplicável  
-    - raw_text (string) → texto original sanitizado  
+    - tamanho (string) → formato "63 cm x 80 cm" se aplicável
+    - custo_und (float)  -> custo unitário, se houver apenas o total, divida pela quantidade_entrada (ex: valor total: 100, quantidade_entrada: 2 -> 50)
 
     ---
 
@@ -639,16 +641,17 @@ def get_bedrock_prompt(text_extracted: str):
     ### EXEMPLO
 
     INPUT: "SACOS P/ LIXO Med. 63 cm X 80 cm Contém 10 unid. 50 50L JHIENE"
-        OUTPUT:
-        {{
-        "tipo_produto": "Saco para lixo",
-        "capacidade": 50,
-        "unidade_de_medida_capacidade": "litros",
-        "quantidade_individual": 10,
-        "quantidade_entrada": null,
-        "marca": "JHIENE",
-        "tamanho": "63 cm x 80 cm",
-        }}
+    OUTPUT:
+    {{
+    "tipo_produto": "Saco para lixo",
+    "capacidade": 50,
+    "unidade_de_medida_capacidade": "litros",
+    "quantidade_individual": 10,
+    "quantidade_entrada": null,
+    "marca": "JHIENE",
+    "tamanho": "63 cm x 80 cm",
+    "custo_und": 20
+    }}
     Entrada aceita:
     - Texto cru OCR contendo nome, medidas, unidades e marca de produto.
     Entrada rejeitada:
@@ -668,7 +671,7 @@ def get_bedrock_prompt(text_extracted: str):
                     "content": [{"type": "text", "text": prompt}],
                     }
             ],
-            "max_tokens": 128,
+            "max_tokens": 256,
             "temperature": 0.5
             }
     return bedrock_request_body
@@ -892,21 +895,16 @@ async def generate_product_info_from_docs_pre_extracted_service(
     )
 
     body_brute = await bedrock_response['body'].read()
-    response_body: dict = loads(body_brute)
-    response_ai_json: dict = loads(response_body['content'][0]['text'])
-    # aqui. Depois descomente o json debaixo
-    # response_ai_json = {
-    #                 "tipo_produto": "Whey Protein",
-    #                 "capacidade": 1,
-    #                 "unidade_de_medida_capacidade": "kg",
-    #                 "quantidade_individual": 1,
-    #                 "quantidade_entrada": 2,
-    #                 "marca": "Growth Supplements",
-    #                 "tamanho": None,
-    #                 "custo_und": 138.77
-    #             }
+    response_body = loads(body_brute.decode("utf-8", errors="ignore"))
 
-    # se não funcionar comenta o bedrock_client dessa função e da chamada/depends dela na rota generate_product_info_from_docs_pre_extracted
+    response_text = response_body['content'][0]['text']
+
+    try:
+        clean_text = sub(r',\s*([}\]])', r'\1', response_text)
+        clean_text = sub(r'[^{}\[\]]+$', '', clean_text)
+        response_ai_json = loads(clean_text)
+    except JSONDecodeError as e:
+        raise ValueError(f"Erro ao decodificar JSON interno: {e}\n\nTexto recebido:\n{response_text}")
     product_name = ''
     product_type = ''
     quantidade_entrada = 1

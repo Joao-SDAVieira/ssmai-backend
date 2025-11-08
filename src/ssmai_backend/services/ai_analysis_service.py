@@ -142,8 +142,8 @@ async def add_forecast_on_db_by_product_id(product_id: int,
     statement = delete(Previsoes).where(Previsoes.id_produtos == product_id)
 
     await session.execute(statement)
-    df_forecast = df_forecast[['ds', 'yhat']].rename(
-        columns={'ds': 'data', 'yhat': 'saida_prevista'}
+    df_forecast = df_forecast[['ds', 'yhat_upper']].rename(
+        columns={'ds': 'data', 'yhat_upper': 'saida_prevista'}
         )
     df_forecast['id_produtos'] = product_id
     forecast_dict = df_forecast.to_dict(orient="records")
