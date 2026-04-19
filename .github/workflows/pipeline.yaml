@@ -1,48 +1,49 @@
 name: Deploy
 
 on:
-push:
-branches:
-- main
+  push:
+    branches:
+      - main
 
 jobs:
-deploy:
-runs-on: ubuntu-latest
+  deploy:
+    runs-on: ubuntu-latest
 
+    steps:
+      - name: Acessar EC2 e fazer deploy
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "📁 Acessando projeto"
+            cd /home/${{ secrets.EC2_USER }}/projects/ssmai_project/ssmai-backend
+            echo "🧹 Limpando Docker COMPLETO (containers, imagens, volumes, cache)"
+            docker system prune -af --volumes || true
+            docker builder prune -af || true
+            
+            echo "🔍 Espaço em disco após limpeza"
+            df -h
+            echo "🧹 Limpando cache Docker"
+            docker system prune -af
+            docker volume prune -f
 
-steps:
-  - name: Acessar EC2 e fazer deploy
-    uses: appleboy/ssh-action@v0.1.10
-    with:
-      host: ${{ secrets.EC2_HOST }}
-      username: ${{ secrets.EC2_USER }}
-      key: ${{ secrets.EC2_SSH_KEY }}
-      script: |
-        echo "📁 Acessando projeto"
-        cd /home/${{ secrets.EC2_USER }}/projects/ssmai_project/ssmai-backend
+            echo "🔄 Atualizando repositório"
+            git fetch origin
+            git reset --hard
+            git clean -fd -e .env
+            git checkout main
+            git pull origin main
 
-        echo "🧹 Limpando Docker COMPLETO (containers, imagens, volumes, cache)"
-        docker system prune -af --volumes || true
-        docker builder prune -af || true
+            echo "🧨 Parando containers antigos"
+            docker compose down --remove-orphans
 
-        echo "🔍 Espaço em disco após limpeza"
-        df -h
+            echo "🧱 Buildando imagem sem cache"
+            docker compose build --no-cache
 
-        echo "🔄 Atualizando repositório"
-        git fetch origin
-        git reset --hard
-        git clean -fd -e .env
-        git checkout main
-        git pull origin main
+            echo "🚀 Subindo containers"
+            docker compose up -d
 
-        echo "🧨 Parando containers antigos"
-        docker compose down --remove-orphans || true
-
-        echo "🧱 Buildando imagem sem cache"
-        docker compose build --no-cache
-
-        echo "🚀 Subindo containers"
-        docker compose up -d
-
-        echo "📜 Logs recentes do backend"
-        docker compose logs --tail=50
+            echo "📜 Logs recentes do backend"
+            docker compose logs --tail=50
