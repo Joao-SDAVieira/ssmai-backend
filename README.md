@@ -10,7 +10,7 @@ O backend é responsável por centralizar as regras de negócio, o processamento
 
 O projeto está em constante evolução e pode receber melhorias e novas funcionalidades conforme as necessidades forem surgindo.
 
-Sinta-se à vontade para explorar o repositório.
+Sinta-se à vontade para explorar o repositório..
 
 ## Arquitetura
 
